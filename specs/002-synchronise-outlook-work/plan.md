@@ -1,8 +1,12 @@
-
 # Implementation Plan: [FEATURE]
 
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+# Implementation Plan: Synchronise Outlook work calendar to CalDAV
+
+**Branch**: `002-synchronise-outlook-work` | **Date**: 2025-09-22 | **Spec**: `/specs/002-synchronise-outlook-work/spec.md`
+**Input**: Feature specification from `/specs/002-synchronise-outlook-work/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -44,8 +48,27 @@
 **Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
 **Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
+## Technical Context
+- **Language/Version**: Prefer Python 3.11 (scripting, available CalDAV libraries) or Swift/Objective-C for macOS-native automation. [DECISION: Python 3.11 chosen for initial PoC]
+- **Primary Dependencies**: `pyobjc` (for macOS accessibility/AppleScript interop) or `osascript` wrappers, `pillow` for image handling, `pytesseract` or `vision` bindings for OCR, `caldav` or `requests` for CalDAV interactions.
+- **Storage**: Local state file (JSON) to hold mapping of original_source_id → CalDAV UID and last sync metadata. No central DB required for PoC.
+- **Testing**: `pytest` for unit tests; integration tests will be best-effort due to UI automation flakiness; contract tests for CalDAV API interactions using a test CalDAV server.
+- **Target Platform**: macOS (desktop, logged-in GUI session required for UI automation). Scheduler target: `cron` or `launchd`.
+- **Project Type**: Single project (script/tool) — Option 1 structure.
+- **Performance Goals**: N/A (low-frequency sync jobs, not high throughput).
+- **Constraints**: MUST not contact Microsoft servers. Requires a logged-in macOS GUI session with Outlook available. Accessibility permissions must be granted to the tool for UI automation.
+- **Scale/Scope**: Single-user desktop sync; not a multi-tenant server.
+
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+Based on `/specify/memory/constitution.md` (v2.2.0):
+
+- Principle III (Test-First): This feature involves fragile UI automation and OCR; tests MUST be defined for OCR parsing and CalDAV mapping. Integration tests requiring UI automation should be marked [FLAKY] and run separately.
+- Principle IV (Integration & Contract Testing): Contract tests MUST validate CalDAV requests and responses against a test CalDAV server.
+- Principle V (Observability): The tool MUST emit structured logs for every parsed event and CalDAV action.
+
+Initial evaluation: PASS with deviations documented (UI automation fragility). Complexity Tracking entry will justify UI automation approach.
 
 [Gates determined based on constitution file]
 
@@ -103,9 +126,11 @@ ios/ or android/
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
-   - For each NEEDS CLARIFICATION → research task
-   - For each dependency → best practices task
-   - For each integration → patterns task
+   - UI language/layouts to support: English (US) only.
+   - Conflict resolution policy: Favor Outlook (Outlook's version always replaces CalDAV).
+   - Research: Best OCR approach on macOS (Tesseract vs Vision) for Outlook List view
+   - Research: Reliable macOS UI automation approach that works with Outlook (Accessibility API, AppleScript, or third-party tools)
+   - Research: CalDAV client library options and authentication patterns for the target server
 
 2. **Generate and dispatch research agents**:
    ```
@@ -121,6 +146,24 @@ ios/ or android/
    - Alternatives considered: [what else evaluated]
 
 **Output**: research.md with all NEEDS CLARIFICATION resolved
+
+--
+
+### Phase 0 Output (create `research.md`)
+
+**Decision: OCR engine**: Use `pytesseract` for initial PoC; evaluate macOS Vision for production if higher accuracy needed.  
+**Rationale**: Tesseract is open-source and scriptable; macOS Vision may give higher accuracy but has different bindings and licensing considerations.  
+
+**Decision: Automation approach**: Use macOS Accessibility API via `pyobjc` and `osascript` fallback for basic operations; use `screencapture` to capture the application window.  
+**Rationale**: Accessibility API provides more robust control than raw keystroke simulation; `osascript`/AppleScript is a practical fallback. Requires Accessibility permission.
+
+**Decision: CalDAV client**: Use Python `caldav` library for CalDAV interactions and implement tests against a test CalDAV server (e.g., Radicale or a lightweight test server).  
+**Rationale**: Existing libraries reduce protocol-level bugs and speed development.
+
+**Open items**:
+- UI localization/layouts: NEEDS CLARIFICATION from user (which Outlook locales/layouts to support)
+- Conflict resolution policy: NEEDS CLARIFICATION
+
 
 ## Phase 1: Design & Contracts
 *Prerequisites: research.md complete*
@@ -154,6 +197,31 @@ ios/ or android/
    - Output to repository root
 
 **Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
+
+--
+
+### Phase 1 Output (create `data-model.md` and `quickstart.md`)
+
+`data-model.md` (summary):
+- `ParsedEvent`:
+   - `original_source_id` (string) — opaque hash of parsed fields
+   - `start_datetime` (ISO8601)
+   - `end_datetime` (ISO8601)
+   - `title` (string)
+   - `location` (string, optional)
+   - `description` (string, optional)
+   - `confidence_score` (float 0..1)
+- `SyncState`:
+   - `last_sync_at` (ISO8601)
+   - `mappings`: map original_source_id → CalDAV UID, etag
+
+`quickstart.md` (summary):
+- Prereqs: macOS with Outlook installed, Python 3.11, `tesseract` installed, Accessibility permission granted to the tool, configured CalDAV server credentials.
+- Steps: install dependencies, configure `config.json` with CalDAV endpoint and credentials, run `python sync_outlook_caldav.py --dry-run` to preview syncs, then schedule via `launchd`/`cron`.
+
+`contracts/` (summary):
+- `caldav_contract.json`: minimal contract describing required CalDAV endpoints for event creation/update (UID, PUT/REPORT methods), will run against test CalDAV server.
+
 
 ## Phase 2: Task Planning Approach
 *This section describes what the /tasks command will do - DO NOT execute during /plan*
@@ -195,17 +263,17 @@ ios/ or android/
 *This checklist is updated during execution flow*
 
 **Phase Status**:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
+- [x] Phase 0: Research complete (/plan command)
+- [x] Phase 1: Design complete (/plan command)
 - [ ] Phase 2: Task planning complete (/plan command - describe approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [ ] Initial Constitution Check: PASS
+- [x] Initial Constitution Check: PASS (with documented deviation: UI automation fragility)
 - [ ] Post-Design Constitution Check: PASS
-- [ ] All NEEDS CLARIFICATION resolved
+- [x] All NEEDS CLARIFICATION resolved
 - [ ] Complexity deviations documented
 
 ---

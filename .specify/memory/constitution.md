@@ -1,50 +1,69 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# calendar-sync Constitution
+<!-- Sync Impact Report
+Version change: v2.1.1 -> v2.2.0
+Modified principles: none renamed; clarified descriptions and added explicit MUST/SHOULD language
+Added sections: Development Workflow (mandatory sections clarified)
+Removed sections: none
+Templates requiring updates: /.specify/templates/plan-template.md ✅ updated
+					   /.specify/templates/spec-template.md ⚠ pending
+					   /.specify/templates/tasks-template.md ⚠ pending
+Follow-up TODOs: TODO(RATIFICATION_DATE): confirm original adoption date if known
+-->
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Minimal, Interoperable Tools
+All components MUST be small, focused, and interoperable. Design favors plain-text, stable interfaces
+and small libraries that can be composed into larger workflows. Rationale: small surface areas
+reduce integration friction and make reasoning about sync behavior easier.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. CLI-First Integration
+Command-line interfaces and scriptable behavior SHOULD be provided for every subsystem. All
+automations MUST support non-interactive usage (stdin/args → stdout, structured errors to stderr)
+to enable CI, debugging, and user automation. Rationale: calendar syncing integrates with varied
+environments and benefits from predictable text-based contracts.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-First (NON-NEGOTIABLE)
+Tests MUST be written before implementation for all production code paths. Contract tests and
+integration tests are REQUIRED for any change that affects external behavior. Rationale: sync
+logic correctness is critical; test-first prevents regressions and clarifies expectations.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Integration & Contract Testing
+Integration tests MUST cover cross-system behaviors (auth, rate limits, idempotency, conflict
+resolution). Contract tests MUST validate schema and I/O expectations with external systems.
+Rationale: calendar-sync operates across APIs and clients where subtle mismatches cause data
+loss.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Observability, Versioning, Simplicity
+Systems MUST emit structured logs and sufficient telemetry to diagnose failures. Release
+artifacts MUST use semantic versioning; breaking changes require a MAJOR bump and a
+documented migration plan. Keep designs as simple as possible; avoid premature optimization.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+## Development Workflow
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+- Code reviews: All changes MUST be reviewed by at least one other maintainer. Reviews MUST
+	validate tests and check the Constitution Check in the related plan.md.
+- Branching: Feature work SHOULD use topic branches named `feat/<short-desc>` or
+	`fix/<short-desc>`. Merge via pull request after CI passes.
+- Releases: Tag releases with semantic versions and include migration notes for breaking changes.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+
+## Security & Performance Constraints
+
+- Authentication: Integrations with calendar providers MUST use secure OAuth flows where
+	supported; secrets MUST not be committed to the repository.
+- Performance: Sync operations SHOULD be designed to be resumable and rate-limit aware; high
+	volume jobs MUST be batched and instrumented.
+
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- Constitution precedence: This document supersedes ad-hoc practices. Any deviation MUST be
+	documented, justified in a complexity tracking entry, and approved by maintainers.
+- Amendments: Changes to principles or governance require a PR with an implementation/migration
+	plan and approval from at least two maintainers. Minor wording fixes MAY be applied via PR
+	with a single maintainer approval.
+- Compliance review: Every feature plan (`plan.md`) MUST include a `Constitution Check` section.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 2.2.0 | **Ratified**: TODO(RATIFICATION_DATE): confirm adoption date | **Last Amended**: 2025-09-22

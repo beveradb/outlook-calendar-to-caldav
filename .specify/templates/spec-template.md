@@ -93,6 +93,9 @@ When creating this spec from a user prompt:
 - [ ] Written for non-technical stakeholders
 - [ ] All mandatory sections completed
 
+### Constitution Compliance
+- [ ] Plan includes a `Constitution Check` referencing `/specify/memory/constitution.md`
+
 ### Requirement Completeness
 - [ ] No [NEEDS CLARIFICATION] markers remain
 - [ ] Requirements are testable and unambiguous  

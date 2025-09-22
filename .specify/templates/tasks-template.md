@@ -125,3 +125,5 @@ Task: "Integration test auth in tests/integration/test_auth.py"
 - [ ] Parallel tasks truly independent
 - [ ] Each task specifies exact file path
 - [ ] No task modifies same file as another [P] task
+
+- [ ] Corresponding `plan.md` contains `Constitution Check` and passes compliance review
