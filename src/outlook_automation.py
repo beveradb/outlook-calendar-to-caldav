@@ -48,7 +48,8 @@ def navigate_to_calendar() -> bool:
     Falls back to menu navigation if shortcut fails.
     """
     try:
-        script = '''
+        # Switch to Work Week view (CMD-2)
+        script_work_week = '''
         tell application "Microsoft Outlook"
             activate
             tell application "System Events"
@@ -56,9 +57,20 @@ def navigate_to_calendar() -> bool:
             end tell
         end tell
         '''
-        subprocess.run(['osascript', '-e', script], check=True)
+        subprocess.run(['osascript', '-e', script_work_week], check=True)
+        time.sleep(1)
+        # Switch to List view (CMD-0)
+        script_list_view = '''
+        tell application "Microsoft Outlook"
+            activate
+            tell application "System Events"
+                keystroke "0" using command down
+            end tell
+        end tell
+        '''
+        subprocess.run(['osascript', '-e', script_list_view], check=True)
         time.sleep(2) # Give UI time to update
-        print("Navigated to calendar successfully using CMD+2.")
+        print("Navigated to Work Week and List views using CMD-2 and CMD-0.")
         return True
     except Exception as e:
         print(f"Error navigating to calendar using CMD+2: {e}")
@@ -94,6 +106,23 @@ def capture_screenshot(filepath: str) -> bool:
         # Use macOS's screencapture utility
         subprocess.run(["screencapture", "-o", "-x", filepath], check=True)
         print(f"Screenshot captured to {filepath}")
+        # Crop the screenshot to 1670x925px from bottom right
+        try:
+            from PIL import Image
+            img = Image.open(filepath)
+            width, height = img.size
+            crop_left = 110
+            crop_top = 240
+            crop_width = 2500
+            crop_height = 1830
+            right = crop_left + crop_width
+            lower = crop_top + crop_height
+            cropped_img = img.crop((crop_left, crop_top, right, lower))
+            cropped_path = filepath.replace('.png', '_cropped.png')
+            cropped_img.save(cropped_path)
+            print(f"Cropped screenshot saved to {cropped_path}")
+        except Exception as crop_e:
+            print(f"Error cropping screenshot: {crop_e}")
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error capturing screenshot: {e}")

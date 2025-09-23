@@ -1,3 +1,4 @@
+
 from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
@@ -6,6 +7,7 @@ from src.models.calendar_data import SyncState, ParsedEvent # Import ParsedEvent
 from src.utils.logger import setup_logging
 import time
 from typing import Callable, TypeVar
+import logging
 
 logger = setup_logging()
 
@@ -75,15 +77,17 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         # 3. Capture screenshot
         screenshot_path = "outlook_calendar_screenshot.png"
+        cropped_path = "outlook_calendar_screenshot_cropped.png"
         logger.info(f"Capturing screenshot to {screenshot_path}...")
         if not _retry(lambda: capture_screenshot(screenshot_path), retries=3, delay=5):
             logger.error("Failed to capture screenshot after multiple retries.")
             return False
-        logger.info("Screenshot captured.")
+        logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
 
-        # 4. Process screenshot with OCR to parse events
-        logger.info("Processing screenshot with OCR...")
-        ocr_text = process_image_with_ocr(screenshot_path)
+        # 4. Process cropped screenshot with OCR to parse events
+        logger.info("Processing cropped screenshot with OCR...")
+        ocr_text = process_image_with_ocr(cropped_path)
+        logger.debug(f"OCR output:\n{ocr_text}")
         parsed_event = parse_outlook_event_from_ocr(ocr_text, current_date)
 
         if not parsed_event:
@@ -109,19 +113,24 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
         logger.info(f"Fetched {len(existing_caldav_events)} existing CalDAV events.")
 
         # 7. Compare and resolve conflicts (Outlook wins)
+
         ical_data = map_parsed_event_to_ical(parsed_event)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"iCalendar payload to be sent:\n{ical_data}")
 
         caldav_uid = sync_state.get_caldav_id(parsed_event.original_source_id)
 
         if caldav_uid:
             logger.info(f"Updating existing CalDAV event: {caldav_uid}")
-            # In a real scenario, we would fetch the CalDAV event, resolve conflict, then put.
-            # For now, as Outlook always wins, we just put the Outlook event.
             response = _retry(lambda: caldav_client.put_event(caldav_uid, ical_data), retries=3, delay=5)
         else:
             logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.original_source_id}")
             response = _retry(lambda: caldav_client.put_event(parsed_event.original_source_id, ical_data), retries=3, delay=5)
             caldav_uid = parsed_event.original_source_id # For new events, UID is the outlook_id
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"CalDAV PUT response status: {response.status_code}")
+            logger.debug(f"CalDAV PUT response body: {response.text}")
 
         if response.status_code in [200, 201, 204]:
             logger.info(f"Event synced successfully. CalDAV UID: {caldav_uid}")
