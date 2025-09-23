@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yourorg.outlook-caldav-sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/AK17/Projects/calendar-sync/sync_outlook_caldav.py</string>
+        <string>--config</string>
+        <string>/Users/AK17/Projects/calendar-sync/specs/002-synchronise-outlook-work/config.yaml</string>
+        <string>--state</string>
+        <string>/Users/AK17/Projects/calendar-sync/specs/002-synchronise-outlook-work/sync_state.json</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/AK17/Projects/calendar-sync/sync_launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/AK17/Projects/calendar-sync/sync_launchd.log</string>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
