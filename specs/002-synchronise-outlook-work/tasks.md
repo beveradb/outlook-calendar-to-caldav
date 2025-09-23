@@ -54,8 +54,8 @@
 
 ## Phase 3.4: Integration
 - [ ] T018 Implement logging for sync operations and errors in `src/utils/logger.py`
-- [ ] T019 Implement error handling and retry mechanisms in `src/sync_tool.py`
-- [ ] T020 Create `sync_outlook_caldav.py` CLI entry point
+- [x] T019 Implement error handling and retry mechanisms in `src/sync_tool.py`
+- [x] T020 Create `sync_outlook_caldav.py` CLI entry point
 - [ ] T021 Create example `config.json` and `sync_state.json` files in `specs/002-synchronise-outlook-work/`
 - [ ] T022 Draft `launchd` or `cron` script for scheduling in `scripts/`
 

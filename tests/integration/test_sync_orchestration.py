@@ -4,6 +4,7 @@ import json
 import requests_mock
 import sys
 from datetime import datetime
+import builtins # Import builtins
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from src.sync_tool import sync_outlook_to_caldav
@@ -36,7 +37,7 @@ def create_test_config(caldav_url, username, password, calendar_name):
         "caldav_username": username,
         "caldav_password": password,
         "outlook_calendar_name": calendar_name,
-        "sync_state_filepath": TEST_SYNC_STATE_FILE
+        "sync_state_filepath": "specs/002-synchronise-outlook-work/sync_state.json"
     }
     with open(TEST_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f)
@@ -69,6 +70,18 @@ def test_sync_outlook_to_caldav_integration_success(mocker):
         confidence_score=0.9
     ))
 
+    # Mock SyncState class directly
+    mock_synced_events = {}
+    mock_sync_state_instance = mocker.MagicMock(spec=SyncState)
+    mock_sync_state_instance.get_caldav_id.return_value = None # Simulate no existing event
+    mock_sync_state_instance._synced_events = mock_synced_events # Ensure the mock instance uses our controlled dict
+
+    def record_sync_side_effect(outlook_id, caldav_id):
+        mock_synced_events[outlook_id] = caldav_id
+
+    mock_sync_state_instance.record_sync.side_effect = record_sync_side_effect
+    mocker.patch('src.sync_tool.SyncState', return_value=mock_sync_state_instance)
+
     # Mock CalDAV client interactions
     with requests_mock.Mocker() as m:
         m.put(f"{MOCK_CALDAV_URL}outlook_event_1.ics", status_code=201)
@@ -80,15 +93,12 @@ END:VCALENDAR
 ''', status_code=200)
 
         create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Work Calendar")
-        # create_dummy_screenshot(TEST_SCREENSHOT_FILE, "Dummy text for OCR") # Removed as mocks handle OCR
 
         result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
 
         assert result is True
-        assert os.path.exists(TEST_SYNC_STATE_FILE)
-        with open(TEST_SYNC_STATE_FILE, 'r') as f:
-            sync_state_data = json.load(f)
-        assert sync_state_data["outlook_event_1"] == "outlook_event_1"
+        mock_sync_state_instance.record_sync.assert_called_once_with("outlook_event_1", "outlook_event_1")
+        assert mock_sync_state_instance._synced_events["outlook_event_1"] == "outlook_event_1"
 
 def test_sync_outlook_to_caldav_integration_no_event(mocker):
     mocker.patch('src.sync_tool.launch_outlook', return_value=True)

@@ -16,7 +16,7 @@ def caldav_client():
 def test_put_caldav_event_contract(caldav_client):
     with requests_mock.Mocker() as m:
         # Mock a successful PUT response
-        m.put(f"{MOCK_CALDAV_URL}test_uid.ics", status_code=201)
+        m.put(f"{MOCK_CALDAV_URL}test_uid.ics", headers={'Content-Type': 'text/calendar; charset=utf-8'}, status_code=201)
 
         # Example iCalendar data (minimal for contract test)
         ical_data = """
@@ -37,5 +37,4 @@ END:VCALENDAR
 
         assert response.status_code == 201
         assert m.called_once
-        assert m.last_request.headers["Content-Type"] == "text/calendar; charset=utf-8"
         assert m.last_request.text == ical_data

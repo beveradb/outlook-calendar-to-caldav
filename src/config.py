@@ -10,7 +10,7 @@ class Config:
     outlook_calendar_name: str
     sync_interval_minutes: int = 15
     log_level: str = "INFO"
-    sync_state_filepath: str = "sync_state.json"
+    sync_state_filepath: str = "specs/002-synchronise-outlook-work/sync_state.json"
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':

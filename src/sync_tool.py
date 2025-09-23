@@ -2,10 +2,32 @@ from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
-from src.models.calendar_data import SyncState
+from src.models.calendar_data import SyncState, ParsedEvent # Import ParsedEvent here
 from src.utils.logger import setup_logging
+import time
+from typing import Callable, TypeVar
 
 logger = setup_logging()
+
+R = TypeVar('R')
+
+def _retry(func: Callable[[], R], retries=3, delay=5) -> R:
+    """Simple retry mechanism for potentially flaky operations."""
+    for i in range(retries):
+        try:
+            return func()
+        except Exception as e:
+            logger.warning(f"Attempt {i+1}/{retries} failed: {e}")
+            if i < retries - 1:
+                time.sleep(delay)
+            else:
+                raise # Re-raise the exception on the last attempt
+    raise RuntimeError("Function did not return a value after retries.") # Should not be reached
+
+def resolve_conflict(outlook_event: ParsedEvent, caldav_event_ical: str) -> ParsedEvent:
+    """Resolves conflicts by always prioritizing the Outlook event."""
+    # As per requirements, Outlook always wins in conflict resolution.
+    return outlook_event
 
 def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
     """Orchestrates the synchronization of Outlook calendar events to CalDAV."""
@@ -17,19 +39,19 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         # 2. Launch Outlook and navigate to calendar
         logger.info("Launching Outlook and navigating to calendar...")
-        if not launch_outlook():
-            logger.error("Failed to launch Outlook.")
+        if not _retry(launch_outlook, retries=3, delay=5):
+            logger.error("Failed to launch Outlook after multiple retries.")
             return False
-        if not navigate_to_calendar():
-            logger.error("Failed to navigate to Outlook calendar.")
+        if not _retry(navigate_to_calendar, retries=3, delay=5):
+            logger.error("Failed to navigate to Outlook calendar after multiple retries.")
             return False
         logger.info("Outlook launched and navigated to calendar.")
 
         # 3. Capture screenshot
         screenshot_path = "outlook_calendar_screenshot.png"
         logger.info(f"Capturing screenshot to {screenshot_path}...")
-        if not capture_screenshot(screenshot_path):
-            logger.error("Failed to capture screenshot.")
+        if not _retry(lambda: capture_screenshot(screenshot_path), retries=3, delay=5):
+            logger.error("Failed to capture screenshot after multiple retries.")
             return False
         logger.info("Screenshot captured.")
 
@@ -51,7 +73,8 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         # 6. Fetch existing CalDAV events (simplified for now)
         logger.info("Fetching existing CalDAV events...")
-        existing_caldav_events = caldav_client.get_events()
+        existing_caldav_events = _retry(caldav_client.get_events, retries=3, delay=5)
+        assert existing_caldav_events is not None # Explicit assertion for linter
         logger.info(f"Fetched {len(existing_caldav_events)} existing CalDAV events.")
 
         # 7. Compare and resolve conflicts (Outlook wins)
@@ -61,10 +84,12 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         if caldav_uid:
             logger.info(f"Updating existing CalDAV event: {caldav_uid}")
-            response = caldav_client.put_event(caldav_uid, ical_data)
+            # In a real scenario, we would fetch the CalDAV event, resolve conflict, then put.
+            # For now, as Outlook always wins, we just put the Outlook event.
+            response = _retry(lambda: caldav_client.put_event(caldav_uid, ical_data), retries=3, delay=5)
         else:
             logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.original_source_id}")
-            response = caldav_client.put_event(parsed_event.original_source_id, ical_data)
+            response = _retry(lambda: caldav_client.put_event(parsed_event.original_source_id, ical_data), retries=3, delay=5)
             caldav_uid = parsed_event.original_source_id # For new events, UID is the outlook_id
 
         if response.status_code in [200, 201, 204]:

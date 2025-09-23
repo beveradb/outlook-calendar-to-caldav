@@ -21,9 +21,15 @@ class SyncState:
         self.load_state()
 
     def load_state(self):
-        if os.path.exists(self.filepath):
-            with open(self.filepath, 'r') as f:
-                self._synced_events = json.load(f)
+        if os.path.exists(self.filepath) and os.path.getsize(self.filepath) > 0:
+            try:
+                with open(self.filepath, 'r') as f:
+                    self._synced_events = json.load(f)
+            except json.JSONDecodeError:
+                # Handle empty or invalid JSON by starting with an empty state
+                self._synced_events = {}
+        else:
+            self._synced_events = {} # Initialize as empty if file doesn't exist or is empty
 
     def save_state(self):
         with open(self.filepath, 'w') as f:
