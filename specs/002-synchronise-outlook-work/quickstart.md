@@ -19,7 +19,7 @@ Configure
 
 Dry run
 ```bash
-python sync_outlook_caldav.py --config specs/002-synchronise-outlook-work/config.json --dry-run
+python sync_outlook_caldav.py --config config.example.json --dry-run
 ```
 
 Schedule

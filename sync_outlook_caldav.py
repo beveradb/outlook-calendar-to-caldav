@@ -13,8 +13,8 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="specs/002-synchronise-outlook-work/config.json",
-        help="Path to the configuration file (default: specs/002-synchronise-outlook-work/config.json)"
+        default="config.json",
+        help="Path to the configuration file (default: config.json)"
     )
     parser.add_argument(
         "--date",

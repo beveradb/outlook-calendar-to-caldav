@@ -1,0 +1,9 @@
+{
+    "caldav_url": "http://localhost:8000/calendars/user/calendar/",
+    "caldav_username": "testuser",
+    "caldav_password": "testpass",
+    "outlook_calendar_name": "Work Calendar",
+    "sync_interval_minutes": 15,
+    "log_level": "INFO",
+    "sync_state_filepath": "sync_state.json"
+}

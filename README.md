@@ -46,7 +46,7 @@ Synchronize your Microsoft Outlook work calendar to any CalDAV server (e.g., Rad
 
 ## Configuration
 1. **Create/Edit the config file:**
-   Copy and edit `specs/002-synchronise-outlook-work/config.json`:
+   Copy and edit `config.example.json` to create `config.json`:
    ```json
    {
      "caldav_url": "http://localhost:8000/calendars/user/calendar/",
@@ -75,8 +75,9 @@ Synchronize your Microsoft Outlook work calendar to any CalDAV server (e.g., Rad
    ```
 2. **Run the sync tool:**
    ```sh
-   python sync_outlook_caldav.py --config specs/002-synchronise-outlook-work/config.json
+   python sync_outlook_caldav.py
    ```
+   - The config file path `config.json` will be used by default, use `--config` to use another path.
    - By default, syncs today's events. Use `--date YYYY-MM-DD` to sync a specific date.
 
 ---
