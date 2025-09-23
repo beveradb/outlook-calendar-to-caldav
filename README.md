@@ -1,7 +1,13 @@
 
+
 # Outlook to CalDAV Sync Tool
 
 Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale, Nextcloud, Apple Calendar) using OCR and UI automation on macOS.
+
+**Critical Warning:**
+> **When you run `sync_outlook_caldav.py`, _all events in the target CalDAV calendar for the selected date will be deleted before new events are created_. This is a primitive solution to avoid duplicates.**
+> 
+> Make sure you are syncing to a dedicated calendar or are comfortable with this destructive behavior. Existing events for the selected date will be lost and replaced by the events extracted from Outlook.
 
 **Important:**
 > The `caldav_url` in your config **must be the full URL to the calendar collection you want to update** (not just the server root or user path). For Radicale, this is typically:
@@ -13,10 +19,11 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
 
 ---
 
+
 ## Features
 - Extracts events from Outlook calendar using UI automation and OCR (no Microsoft server/API required)
 - Maps and uploads events to a CalDAV server (supports self-hosted and cloud)
-- Idempotent sync: avoids duplicate uploads
+- **Deletes all events in the target calendar for the selected date before uploading new ones (prevents duplicates)**
 - Robust error handling, logging, and conflict resolution (Outlook always wins)
 - CLI and scheduler support (cron/launchd)
 
@@ -93,32 +100,37 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
 
 ---
 
+
 ## What to Expect
 - **Outlook will launch and switch to calendar view automatically.**
 - The tool will take a screenshot, run OCR, parse events, and upload them to your CalDAV server.
+- **All events in the target CalDAV calendar for the selected date will be deleted before new events are created.**
+   - This ensures no duplicates, but means any existing events for that date will be lost and replaced by the new sync.
 - **Log output:**
-  - Logs are written to `logs/calendar_sync.log` (and printed to the console)
-  - Look for lines like:
-    - `INFO - Starting Outlook to CalDAV synchronization.`
-    - `INFO - Configuration loaded successfully.`
-    - `INFO - Launching Outlook and navigating to calendar...`
-    - `INFO - Synchronization completed successfully.`
-  - **Errors** will be logged as `ERROR` or `WARNING` lines
+   - Logs are written to `logs/calendar_sync.log` (and printed to the console)
+   - Look for lines like:
+      - `INFO - Starting Outlook to CalDAV synchronization.`
+      - `INFO - Configuration loaded successfully.`
+      - `INFO - Launching Outlook and navigating to calendar...`
+      - `INFO - Synchronization completed successfully.`
+   - **Errors** will be logged as `ERROR` or `WARNING` lines
 
 ---
 
+
 ## Troubleshooting & Tips
 - **No events appear on CalDAV?**
-  - Check the log file for errors (authentication, network, OCR failures, etc.)
-  - Ensure the CalDAV URL and credentials are correct
-  - Make sure Outlook is open and accessible
+   - Check the log file for errors (authentication, network, OCR failures, etc.)
+   - Ensure the CalDAV URL and credentials are correct
+   - Make sure Outlook is open and accessible
 - **OCR errors?**
-  - Try increasing screen brightness or calendar font size
-  - Check that Tesseract is installed and working
+   - Try increasing screen brightness or calendar font size
+   - Check that Tesseract is installed and working
 - **Automation errors?**
-  - Ensure Terminal/Python has Accessibility permissions
-- **Idempotency:**
-  - The tool will not re-upload events it has already synced (tracked in `sync_state.json`)
+   - Ensure Terminal/Python has Accessibility permissions
+- **Event Deletion & Idempotency:**
+   - The tool deletes all events in the target calendar for the selected date before uploading new ones. This avoids duplicates but is destructive for that date.
+   - There is no incremental sync; all events for the date are replaced each run.
 
 ---
 
