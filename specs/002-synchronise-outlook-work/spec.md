@@ -1,9 +1,9 @@
-# Feature Specification: Synchronise Outlook work calendar to CalDAV
+# Feature Specification: Synchronise Outlook Calendar to CalDAV
 
 **Feature Branch**: `002-synchronise-outlook-work`  
 **Created**: 2025-09-22
 **Status**: Draft  
-**Input**: User description: "Synchronise Outlook work calendar events to a CalDAV server by manipulating the Outlook macOS application window, extracting events via screenshots+OCR, and writing them to a configured CalDAV server. Tool should launch Outlook, foreground and maximise the window, open calendar view, go to Today, switch to Work Week, then List view, screenshot, OCR, parse events, and create corresponding CalDAV entries. Must not communicate with Microsoft servers; runs via scheduler."
+**Input**: User description: "Synchronise Outlook Calendar events to a CalDAV server by manipulating the Outlook macOS application window, extracting events via screenshots+OCR, and writing them to a configured CalDAV server. Tool should launch Outlook, foreground and maximise the window, open calendar view, go to Today, switch to Work Week, then List view, screenshot, OCR, parse events, and create corresponding CalDAV entries. Must not communicate with Microsoft servers; runs via scheduler."
 
 ## Execution Flow (main)
 ```
@@ -42,7 +42,7 @@
 ## User Scenarios & Testing *(mandatory)*
 
 ### Primary User Story
-As a user who has been granted permission, I want my Outlook work calendar events to be mirrored to a configured CalDAV calendar so that events created or updated in Outlook are available to the CalDAV clients without exposing Microsoft account credentials or contacting Microsoft servers directly.
+As a user who has been granted permission, I want my Outlook Calendar events to be mirrored to a configured CalDAV calendar so that events created or updated in Outlook are available to the CalDAV clients without exposing Microsoft account credentials or contacting Microsoft servers directly.
 
 ### Acceptance Scenarios
 1. Given Outlook is installed and the user account is logged in, when the tool runs, then Outlook is launched (if not running), the Calendar view is shown in List view for Today, a screenshot is taken, OCR extracts event start, end, title, location and notes, and corresponding events are created/updated on the configured CalDAV calendar.

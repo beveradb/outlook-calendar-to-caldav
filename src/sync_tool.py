@@ -93,7 +93,12 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         # 5. Initialize CalDAV client and SyncState
         logger.info("Initializing CalDAV client and SyncState...")
-        caldav_client = CalDAVClient(config.caldav_url, config.caldav_username, config.caldav_password)
+        caldav_client = CalDAVClient(
+            config.caldav_url,
+            config.caldav_username,
+            config.caldav_password,
+            getattr(config, "verify_ssl", True)
+        )
         sync_state = SyncState(config.sync_state_filepath)
         logger.info("CalDAV client and SyncState initialized.")
 

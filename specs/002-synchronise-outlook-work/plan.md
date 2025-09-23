@@ -3,7 +3,7 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-# Implementation Plan: Synchronise Outlook work calendar to CalDAV
+# Implementation Plan: Synchronise Outlook Calendar to CalDAV
 
 **Branch**: `002-synchronise-outlook-work` | **Date**: 2025-09-22 | **Spec**: `/specs/002-synchronise-outlook-work/spec.md`
 **Input**: Feature specification from `/specs/002-synchronise-outlook-work/spec.md`

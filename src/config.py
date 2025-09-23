@@ -4,6 +4,7 @@ from typing import Optional
 
 
 @dataclass
+
 class Config:
     """
     Configuration for the sync tool, loaded from a JSON file.
@@ -15,6 +16,7 @@ class Config:
     sync_interval_minutes: int = 15
     log_level: str = "INFO"
     sync_state_filepath: str = "specs/002-synchronise-outlook-work/sync_state.json"
+    verify_ssl: bool = True
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':
@@ -35,6 +37,9 @@ class Config:
             for field_name in required_fields:
                 if field_name not in config_data:
                     raise ValueError(f"Missing required configuration field: {field_name}")
+            # Default verify_ssl to True if not present
+            if "verify_ssl" not in config_data:
+                config_data["verify_ssl"] = True
             return cls(**config_data)
         except FileNotFoundError:
             raise FileNotFoundError(f"Config file not found at {filepath}")

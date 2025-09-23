@@ -27,7 +27,7 @@ def test_config_load_from_file_success():
         "caldav_url": "http://localhost:8000/caldav/",
         "caldav_username": "testuser",
         "caldav_password": "testpass",
-        "outlook_calendar_name": "Work Calendar",
+        "outlook_calendar_name": "Calendar",
         "sync_state_filepath": "specs/002-synchronise-outlook-work/sync_state.json"
     }
     create_test_config(config_data)
@@ -69,7 +69,7 @@ def test_config_save_to_file():
         caldav_url="http://localhost:8000/caldav/",
         caldav_username="testuser",
         caldav_password="testpass",
-        outlook_calendar_name="Work Calendar",
+        outlook_calendar_name="Calendar",
         sync_interval_minutes=30,
         log_level="DEBUG",
         sync_state_filepath="specs/002-synchronise-outlook-work/sync_state.json"

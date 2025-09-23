@@ -1,6 +1,15 @@
+
 # Outlook to CalDAV Sync Tool
 
-Synchronize your Microsoft Outlook work calendar to any CalDAV server (e.g., Radicale, Nextcloud, Apple Calendar) using OCR and UI automation on macOS.
+Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale, Nextcloud, Apple Calendar) using OCR and UI automation on macOS.
+
+**Important:**
+> The `caldav_url` in your config **must be the full URL to the calendar collection you want to update** (not just the server root or user path). For Radicale, this is typically:
+>
+> `https://your-server/username/CALENDAR_ID/`
+>
+> Example:
+> `https://calendar.yourdomain.com/somepath/84996a40-5960-433b-9206-98c4032e46a0/`
 
 ---
 
@@ -48,15 +57,17 @@ Synchronize your Microsoft Outlook work calendar to any CalDAV server (e.g., Rad
 1. **Create/Edit the config file:**
    Copy and edit `config.example.json` to create `config.json`:
    ```json
-   {
-     "caldav_url": "http://localhost:8000/calendars/user/calendar/",
-     "caldav_username": "testuser",
-     "caldav_password": "testpass",
-     "outlook_calendar_name": "Work Calendar",
-     "sync_interval_minutes": 15,
-     "log_level": "INFO",
-     "sync_state_filepath": "sync_state.json"
-   }
+    {
+       "caldav_url": "https://calendar.yourdomain.com/somepath/84996a40-5960-433b-9206-98c4032e46a0/",
+       "caldav_username": "your_username",
+       "caldav_password": "your_password",
+       "outlook_calendar_name": "Calendar",
+       "sync_interval_minutes": 15,
+       "log_level": "INFO",
+       "sync_state_filepath": "sync_state.json",
+       "verify_ssl": false
+    }
+    # Set "verify_ssl": false to disable SSL certificate verification (for self-signed/test servers)
    ```
    - `caldav_url`: Your CalDAV server's calendar URL (ending with `/`)
    - `caldav_username`/`caldav_password`: CalDAV credentials

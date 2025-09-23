@@ -5,20 +5,23 @@ import requests
 # Assuming ParsedEvent is defined in ocr_processor.py
 from src.ocr_processor import ParsedEvent
 
+
 class CalDAVClient:
     """
     Simple CalDAV client for event PUT and fetch operations.
     """
-    def __init__(self, base_url: str, username: str, password: str):
+    def __init__(self, base_url: str, username: str, password: str, verify_ssl: bool = True):
         """
         Args:
             base_url: CalDAV server base URL (ending with /)
             username: CalDAV username
             password: CalDAV password
+            verify_ssl: Whether to verify SSL certificates (default: True)
         """
         self.base_url = base_url
         self.username = username
         self.password = password
+        self.verify_ssl = verify_ssl
 
     def put_event(self, uid: str, ical_data: str) -> requests.Response:
         """
@@ -31,7 +34,12 @@ class CalDAVClient:
         """
         url = f"{self.base_url}{uid}.ics"
         headers = {"Content-Type": "text/calendar; charset=utf-8"}
-        response = requests.put(url, data=ical_data.encode('utf-8'), auth=(self.username, self.password))
+        response = requests.put(
+            url,
+            data=ical_data.encode('utf-8'),
+            auth=(self.username, self.password),
+            verify=self.verify_ssl
+        )
         return response
 
     def get_events(self) -> dict[str, str]:

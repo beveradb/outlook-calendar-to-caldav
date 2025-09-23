@@ -92,7 +92,7 @@ PRODID:-//Example Corp//Calendar Sync//EN
 END:VCALENDAR
 ''', status_code=200)
 
-        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Work Calendar")
+        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Calendar")
 
         result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
 
@@ -115,7 +115,7 @@ PRODID:-//Example Corp//Calendar Sync//EN
 END:VCALENDAR
 ''', status_code=200)
 
-        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Work Calendar")
+        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Calendar")
         create_dummy_screenshot(TEST_SCREENSHOT_FILE, "")
 
         result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
@@ -126,7 +126,7 @@ END:VCALENDAR
 def test_sync_outlook_to_caldav_integration_outlook_launch_failure(mocker):
     mocker.patch('src.sync_tool.launch_outlook', return_value=False)
 
-    create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Work Calendar")
+    create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Calendar")
     result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
     assert result is False
 
@@ -154,7 +154,7 @@ PRODID:-//Example Corp//Calendar Sync//EN
 END:VCALENDAR
 ''', status_code=200)
 
-        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Work Calendar")
+        create_test_config(MOCK_CALDAV_URL, "testuser", "testpass", "Calendar")
         create_dummy_screenshot(TEST_SCREENSHOT_FILE, "Dummy text for OCR")
 
         result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")

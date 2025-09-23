@@ -1,4 +1,4 @@
-# Tasks: Synchronise Outlook work calendar to CalDAV
+# Tasks: Synchronise Outlook Calendar to CalDAV
 
 **Input**: Design documents from `/specs/002-synchronise-outlook-work/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
