@@ -29,13 +29,13 @@
 - **Single project**: `src/`, `tests/` at repository root
 
 ## Phase 3.1: Setup
-- [ ] T001 Create Python project structure (src/, tests/, config.json, sync_state.json)
-- [ ] T002 Initialize Python environment and install dependencies (`pillow`, `pytesseract`, `caldav`, `pyobjc`)
-- [ ] T003 [P] Configure linting (e.g., `flake8`, `black`) and formatting tools
+- [x] T001 Create Python project structure (src/, tests/, config.json, sync_state.json)
+- [x] T002 Initialize Python environment and install dependencies (`pillow`, `pytesseract`, `caldav`, `pyobjc`)
+- [x] T003 [P] Configure linting (e.g., `flake8`, `black`) and formatting tools
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T004 [P] Contract test CalDAV PUT operation in `tests/contract/test_caldav_put.py` (using a mock/test CalDAV server)
+- [x] T004 [P] Contract test CalDAV PUT operation in `tests/contract/test_caldav_put.py` (using a mock/test CalDAV server)
 - [ ] T005 [P] Unit test OCR parsing logic for event fields in `tests/unit/test_ocr_parsing.py`
 - [ ] T006 [P] Unit test event mapping to CalDAV format in `tests/unit/test_event_mapping.py`
 - [ ] T007 [FLAKY] Integration test Outlook UI automation (launch, navigate, screenshot) in `tests/integration/test_outlook_ui.py`
