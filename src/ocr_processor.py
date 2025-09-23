@@ -4,8 +4,12 @@ import re
 from PIL import Image
 import pytesseract
 
+
 @dataclass
 class ParsedEvent:
+    """
+    Represents a calendar event parsed from OCR output.
+    """
     original_source_id: str
     start_datetime: str
     end_datetime: str
@@ -14,8 +18,15 @@ class ParsedEvent:
     description: str | None = None
     confidence_score: float = 0.0
 
+
 def _is_location_line(line: str) -> bool:
-    """Heuristic to determine if a line is likely a location."""
+    """
+    Heuristic to determine if a line is likely a location (e.g., room, office).
+    Args:
+        line: Text line from OCR output
+    Returns:
+        True if line is likely a location, False otherwise
+    """
     if not line or len(line.split()) > 6:
         return False
     keywords = ["room", "office", "building", "floor", "suite"]
@@ -28,7 +39,18 @@ def _is_location_line(line: str) -> bool:
         return True
     return False
 
+
 def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEvent | None:
+    """
+    Parse OCR text output into a ParsedEvent object.
+    Args:
+        ocr_text: Raw text output from OCR
+        current_date: Date string (YYYY-MM-DD) for the event
+    Returns:
+        ParsedEvent if parsing is successful, None otherwise
+    Raises:
+        ValueError if time parsing fails
+    """
     if not ocr_text.strip():
         return None
 
@@ -116,8 +138,18 @@ def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEven
         confidence_score=0.8 # Placeholder
     )
 
+
 def process_image_with_ocr(image_path: str) -> str:
-    """Processes an image with OCR to extract text."""
+    """
+    Run OCR on an image file and return the extracted text.
+    Args:
+        image_path: Path to the image file
+    Returns:
+        Extracted text as a string
+    Raises:
+        FileNotFoundError if the image file does not exist
+        RuntimeError for other OCR errors
+    """
     try:
         img = Image.open(image_path)
         text = pytesseract.image_to_string(img)

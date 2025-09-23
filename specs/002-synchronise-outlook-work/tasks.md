@@ -53,16 +53,16 @@
 - [x] T017 Implement main sync orchestration logic in `src/sync_tool.py`
 
 ## Phase 3.4: Integration
-- [ ] T018 Implement logging for sync operations and errors in `src/utils/logger.py`
+ - [x] T018 Implement logging for sync operations and errors in `src/utils/logger.py`
 - [x] T019 Implement error handling and retry mechanisms in `src/sync_tool.py`
 - [x] T020 Create `sync_outlook_caldav.py` CLI entry point
-- [ ] T021 Create example `config.json` and `sync_state.json` files in `specs/002-synchronise-outlook-work/`
-- [ ] T022 Draft `launchd` or `cron` script for scheduling in `scripts/`
+ - [x] T021 Create example `config.json` and `sync_state.json` files in `specs/002-synchronise-outlook-work/`
+ - [x] T022 Draft `launchd` or `cron` script for scheduling in `scripts/`
 
 ## Phase 3.5: Polish
-- [ ] T023 [P] Update `quickstart.md` with final installation and usage instructions
-- [ ] T024 [P] Add comprehensive documentation and comments to all new code
-- [ ] T025 Refactor code for clarity, maintainability, and remove duplication
+ - [x] T023 [P] Update `quickstart.md` with final installation and usage instructions
+ - [x] T024 [P] Add comprehensive documentation and comments to all new code
+ - [x] T025 Refactor code for clarity, maintainability, and remove duplication
 
 ## Dependencies
 - T001-T003 before T004-T009

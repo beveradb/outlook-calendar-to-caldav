@@ -11,8 +11,19 @@ logger = setup_logging()
 
 R = TypeVar('R')
 
+
 def _retry(func: Callable[[], R], retries=3, delay=5) -> R:
-    """Simple retry mechanism for potentially flaky operations."""
+    """
+    Retry a function up to 'retries' times with a delay between attempts.
+    Args:
+        func: Callable to execute
+        retries: Number of attempts
+        delay: Seconds to wait between attempts
+    Returns:
+        Result of func()
+    Raises:
+        Exception from func() if all retries fail
+    """
     for i in range(retries):
         try:
             return func()
@@ -24,13 +35,28 @@ def _retry(func: Callable[[], R], retries=3, delay=5) -> R:
                 raise # Re-raise the exception on the last attempt
     raise RuntimeError("Function did not return a value after retries.") # Should not be reached
 
+
 def resolve_conflict(outlook_event: ParsedEvent, caldav_event_ical: str) -> ParsedEvent:
-    """Resolves conflicts by always prioritizing the Outlook event."""
+    """
+    Resolve a conflict between Outlook and CalDAV events.
+    Args:
+        outlook_event: ParsedEvent from Outlook
+        caldav_event_ical: iCalendar string from CalDAV
+    Returns:
+        ParsedEvent to use (Outlook always wins per requirements)
+    """
     # As per requirements, Outlook always wins in conflict resolution.
     return outlook_event
 
 def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
-    """Orchestrates the synchronization of Outlook calendar events to CalDAV."""
+    """
+    Orchestrate the synchronization of Outlook calendar events to CalDAV.
+    Args:
+        config_filepath: Path to config JSON file
+        current_date: Date string (YYYY-MM-DD) for which to sync events
+    Returns:
+        True if sync is successful, False otherwise
+    """
     try:
         # 1. Load configuration
         config = Config.load_from_file(config_filepath)

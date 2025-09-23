@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass
 import requests
 
@@ -5,25 +6,53 @@ import requests
 from src.ocr_processor import ParsedEvent
 
 class CalDAVClient:
+    """
+    Simple CalDAV client for event PUT and fetch operations.
+    """
     def __init__(self, base_url: str, username: str, password: str):
+        """
+        Args:
+            base_url: CalDAV server base URL (ending with /)
+            username: CalDAV username
+            password: CalDAV password
+        """
         self.base_url = base_url
         self.username = username
         self.password = password
 
     def put_event(self, uid: str, ical_data: str) -> requests.Response:
+        """
+        Upload or update an event to CalDAV server.
+        Args:
+            uid: Unique identifier for the event (used as filename)
+            ical_data: iCalendar string
+        Returns:
+            requests.Response from the PUT request
+        """
         url = f"{self.base_url}{uid}.ics"
         headers = {"Content-Type": "text/calendar; charset=utf-8"}
         response = requests.put(url, data=ical_data.encode('utf-8'), auth=(self.username, self.password))
         return response
 
     def get_events(self) -> dict[str, str]:
-        """Fetches all events from the CalDAV server."""
+        """
+        Fetch all events from the CalDAV server.
+        Returns:
+            Dictionary mapping event UIDs to iCalendar strings.
+        Note: This is a stub; a real implementation would parse the CalDAV multistatus XML response.
+        """
         # This is a simplified implementation. A real CalDAV client would parse the multistatus XML response.
         # For now, it returns a dummy dictionary.
         return {"caldav_event_1": "BEGIN:VCALENDAR...END:VCALENDAR"}
 
 def map_parsed_event_to_ical(event: ParsedEvent) -> str:
-    """Maps a ParsedEvent object to an iCalendar string."""
+    """
+    Convert a ParsedEvent object to an iCalendar (VCALENDAR) string.
+    Args:
+        event: ParsedEvent instance
+    Returns:
+        iCalendar string
+    """
     # Format datetimes to iCalendar format (YYYYMMDDTHHMMSSZ)
     dtstamp = event.start_datetime.replace("-", "").replace(":", "") + "Z"
     dtstart = event.start_datetime.replace("-", "").replace(":", "") + "Z"

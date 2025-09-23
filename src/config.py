@@ -2,8 +2,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Optional
 
+
 @dataclass
 class Config:
+    """
+    Configuration for the sync tool, loaded from a JSON file.
+    """
     caldav_url: str
     caldav_username: str
     caldav_password: str
@@ -14,6 +18,15 @@ class Config:
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':
+        """
+        Load configuration from a JSON file and validate required fields.
+        Args:
+            filepath: Path to the config JSON file
+        Returns:
+            Config instance
+        Raises:
+            FileNotFoundError, ValueError, RuntimeError
+        """
         try:
             with open(filepath, 'r') as f:
                 config_data = json.load(f)
@@ -33,5 +46,10 @@ class Config:
             raise RuntimeError(f"Error loading configuration: {e}")
 
     def save_to_file(self, filepath: str = "config.json"):
+        """
+        Save the current configuration to a JSON file.
+        Args:
+            filepath: Path to save the config JSON file
+        """
         with open(filepath, 'w') as f:
             json.dump(self.__dict__, f, indent=4)

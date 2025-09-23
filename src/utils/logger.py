@@ -1,8 +1,18 @@
 import logging
 import os
 
+
 def setup_logging(log_level: str = "INFO", log_file: str = "calendar_sync.log"):
-    """Configures logging for the application."""
+    """
+    Configure logging for the application.
+    Args:
+        log_level: Logging level as a string (e.g., 'INFO', 'DEBUG')
+        log_file: Name of the log file (in logs/ directory)
+    Returns:
+        Configured logger instance
+    Raises:
+        ValueError if log_level is invalid
+    """
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError(f"Invalid log level: {log_level}")

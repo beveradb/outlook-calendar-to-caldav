@@ -4,8 +4,13 @@ import os
 import objc
 from AppKit import NSWorkspace
 
+
 def launch_outlook() -> bool:
-    """Launches the Outlook application on macOS."""
+    """
+    Launch the Outlook application on macOS, bringing it to the foreground.
+    Returns:
+        True if Outlook is running or launched successfully, False otherwise.
+    """
     try:
         # Check if Outlook is already running
         running_apps = NSWorkspace.sharedWorkspace().runningApplications()
@@ -34,8 +39,14 @@ def launch_outlook() -> bool:
         print(f"Error launching Outlook: {e}")
         return False
 
+
 def navigate_to_calendar() -> bool:
-    """Navigates to the calendar view in Outlook using CMD+2 shortcut."""
+    """
+    Navigate to the calendar view in Outlook using CMD+2 shortcut.
+    Returns:
+        True if navigation is successful, False otherwise.
+    Falls back to menu navigation if shortcut fails.
+    """
     try:
         script = '''
         tell application "Microsoft Outlook"
@@ -70,8 +81,15 @@ def navigate_to_calendar() -> bool:
             print(f"Error navigating to calendar via menu: {menu_e}")
             return False
 
+
 def capture_screenshot(filepath: str) -> bool:
-    """Captures a screenshot of the active window and saves it to the specified filepath."""
+    """
+    Capture a screenshot of the active window and save it to the specified filepath.
+    Args:
+        filepath: Path to save the screenshot
+    Returns:
+        True if screenshot is captured successfully, False otherwise.
+    """
     try:
         # Use macOS's screencapture utility
         subprocess.run(["screencapture", "-o", "-x", filepath], check=True)
