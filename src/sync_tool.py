@@ -86,9 +86,14 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         # 4. Process cropped screenshot with OCR to parse events
         logger.info("Processing cropped screenshot with OCR...")
-        ocr_text = process_image_with_ocr(cropped_path)
-        logger.debug(f"OCR output:\n{ocr_text}")
-        parsed_event = parse_outlook_event_from_ocr(ocr_text, current_date)
+        ocr_rows = process_image_with_ocr(cropped_path)
+        # Log each row for manual validation
+        logger.debug("OCR output by row:")
+        for idx, row in enumerate(ocr_rows, 1):
+            logger.debug(f"Row {idx}: {row}")
+        # Inform user to check logs for raw OCR word data and row grouping
+        logger.error("Manual validation required: review raw OCR word data and row output in logs. Advise on event parsing rules if grouping looks correct.")
+        return False
 
         if not parsed_event:
             logger.info("No event found in OCR output.")

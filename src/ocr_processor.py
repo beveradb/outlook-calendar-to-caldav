@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
+import os
 from PIL import Image
 import pytesseract
 
@@ -139,22 +140,74 @@ def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEven
     )
 
 
-def process_image_with_ocr(image_path: str) -> str:
+def process_image_with_ocr(image_path: str):
     """
-    Run OCR on an image file and return the extracted text.
+    Run OCR on an image file and return detailed word-level data (bounding boxes, text, line numbers).
     Args:
         image_path: Path to the image file
     Returns:
-        Extracted text as a string
+        List of dicts with keys: 'text', 'left', 'top', 'width', 'height', 'conf', 'line_num', 'word_num'
     Raises:
         FileNotFoundError if the image file does not exist
         RuntimeError for other OCR errors
     """
+    from src.utils.logger import logger
     try:
         img = Image.open(image_path)
-        text = pytesseract.image_to_string(img)
-        return text
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Image file not found at {image_path}")
     except Exception as e:
-        raise RuntimeError(f"Error during OCR processing: {e}")
+        logger.error(f"Could not open image {image_path}: {e}")
+        return []
+
+    ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+    n_boxes = len(ocr_data['level'])
+    words = []
+    logger.debug("Raw OCR word data:")
+    for i in range(n_boxes):
+        word = ocr_data['text'][i].strip()
+        if not word:
+            continue
+        word_data = {
+            'text': word,
+            'x': ocr_data['left'][i],
+            'y': ocr_data['top'][i],
+            'width': ocr_data['width'][i],
+            'height': ocr_data['height'][i]
+        }
+        logger.debug(f"Word: {word_data}")
+        words.append(word_data)
+
+    # Cluster words into bins by y-coordinate (within 25px)
+    row_bins = []  # Each bin is a list of words
+    bin_threshold = 25  # px
+    for w in words:
+        placed = False
+        for bin in row_bins:
+            bin_center_y = sum(word['y'] for word in bin) / len(bin)
+            if abs(w['y'] - bin_center_y) <= bin_threshold:
+                bin.append(w)
+                placed = True
+                break
+        if not placed:
+            row_bins.append([w])
+
+    # Sort row bins by their minimum y-coordinate (top to bottom)
+    row_bins_sorted = sorted(row_bins, key=lambda bin: min(w['y'] for w in bin))
+    rows = []
+    ocr_crop_dir = os.path.join(os.path.dirname(image_path), "ocr_crops")
+    os.makedirs(ocr_crop_dir, exist_ok=True)
+    for idx, bin in enumerate(row_bins_sorted, 1):
+        bin_sorted = sorted(bin, key=lambda wd: wd['x'])
+        row_text = " ".join([wd['text'] for wd in bin_sorted])
+        rows.append(row_text)
+        # Calculate y bounds for the row
+        y_min = min(w['y'] for w in bin)
+        y_max = max(w['y'] + w['height'] for w in bin)
+        # Log bounds
+        logger.debug(f"Row {idx}: y_min={y_min}, y_max={y_max}, text={row_text}")
+        # Save crop
+        if img:
+            crop_path = os.path.join(ocr_crop_dir, f"row_{idx:02d}.png")
+            crop_img = img.crop((0, y_min, img.width, y_max))
+            crop_img.save(crop_path)
+            logger.debug(f"Row {idx}: cropped image saved to {crop_path}")
+    return rows
