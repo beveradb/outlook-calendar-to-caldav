@@ -176,9 +176,9 @@ def process_image_with_ocr(image_path: str):
         logger.debug(f"Word: {word_data}")
         words.append(word_data)
 
-    # Cluster words into bins by y-coordinate (within 25px)
+    # Cluster words into bins by y-coordinate (within 20px)
     row_bins = []  # Each bin is a list of words
-    bin_threshold = 25  # px
+    bin_threshold = 20  # px
     for w in words:
         placed = False
         for bin in row_bins:
