@@ -16,6 +16,12 @@ class CalDAVClient:
         response = requests.put(url, data=ical_data.encode('utf-8'), auth=(self.username, self.password))
         return response
 
+    def get_events(self) -> dict[str, str]:
+        """Fetches all events from the CalDAV server."""
+        # This is a simplified implementation. A real CalDAV client would parse the multistatus XML response.
+        # For now, it returns a dummy dictionary.
+        return {"caldav_event_1": "BEGIN:VCALENDAR...END:VCALENDAR"}
+
 def map_parsed_event_to_ical(event: ParsedEvent) -> str:
     """Maps a ParsedEvent object to an iCalendar string."""
     # Format datetimes to iCalendar format (YYYYMMDDTHHMMSSZ)

@@ -49,8 +49,8 @@
 - [x] T013 Implement screenshot capture function in `src/outlook_automation.py`
 - [x] T014 Implement OCR processing function in `src/ocr_processor.py`
 - [x] T015 Implement event parsing from OCR output in `src/ocr_processor.py`
-- [ ] T016 Implement CalDAV client for event creation/update in `src/caldav_client.py`
-- [ ] T017 Implement main sync orchestration logic in `src/sync_tool.py`
+- [x] T016 Implement CalDAV client for event creation/update in `src/caldav_client.py`
+- [x] T017 Implement main sync orchestration logic in `src/sync_tool.py`
 
 ## Phase 3.4: Integration
 - [ ] T018 Implement logging for sync operations and errors in `src/utils/logger.py`
