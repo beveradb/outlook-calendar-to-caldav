@@ -138,9 +138,36 @@ def process_image_with_ocr(image_path: str):
         logger.error(f"Could not open image {image_path}: {e}")
         raise FileNotFoundError(f"Image file not found at {image_path}")
 
+    # --- Color replacement for #f6640c and #954a27 and similar colors ---
+    # Convert to RGB if not already
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    pixels = img.load()
+    width, height = img.size
+    import colorsys
+    def rgb_to_hls(r, g, b):
+        return colorsys.rgb_to_hls(r/255.0, g/255.0, b/255.0)
+
+    # Replace any pixel with saturation above threshold
+    saturation_thresh = 0.2
+    for y in range(height):
+        for x in range(width):
+            r, g, b = pixels[x, y]
+            h, l, s = rgb_to_hls(r, g, b)
+            if s > saturation_thresh:
+                pixels[x, y] = (0, 0, 0)
+
+    # Save the color-replaced image for manual review
+    color_replaced_path = image_path.replace('.png', '_color_replaced.png')
+    try:
+        img.save(color_replaced_path)
+        logger.debug(f"Color-replaced image saved to {color_replaced_path}")
+    except Exception as e:
+        logger.error(f"Could not save color-replaced image: {e}")
+
     # Convert to grayscale and enhance contrast
     img = img.convert('L')  # Grayscale
-    threshold = 50
+    threshold = 80
     img = img.point([255 if i > threshold else 0 for i in range(256)])
 
     # Save the processed image for manual review
@@ -154,14 +181,18 @@ def process_image_with_ocr(image_path: str):
     ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
     n_boxes = len(ocr_data['level'])
     words = []
-    # Collect words first
+    # Collect words first, discarding those in x=775..880
     for i in range(n_boxes):
         word = ocr_data['text'][i].strip()
         if not word:
             continue
+        x = ocr_data['left'][i]
+        if 775 <= x <= 880:
+            logger.debug(f"Discarding word at x={x}: '{word}'")
+            continue
         word_data = {
             'text': word,
-            'x': ocr_data['left'][i],
+            'x': x,
             'y': ocr_data['top'][i],
             'width': ocr_data['width'][i],
             'height': ocr_data['height'][i]
@@ -183,7 +214,7 @@ def process_image_with_ocr(image_path: str):
 
     # Sort words by top y
     words_sorted = sorted(words, key=lambda w: w['y'])
-    rows = []
+    rows = []  # List of lists of word objects
     ocr_crop_dir = os.path.join(os.path.dirname(image_path), "ocr_crops")
     os.makedirs(ocr_crop_dir, exist_ok=True)
 
@@ -227,8 +258,9 @@ def process_image_with_ocr(image_path: str):
             crop_img.save(crop_path)
             logger.debug(f"Row {row_idx}: y_min={row_y_min}, y_max={row_y_max}, text={row_text}")
             logger.debug(f"Row {row_idx}: cropped image saved to {crop_path}")
-            rows.append(row_text)
+            rows.append(row_words_sorted)  # Save word objects per row
             last_y_max = row_y_max
+            row_idx += 1
             row_idx += 1
 
     # --- Event parsing and cleanup ---
@@ -242,23 +274,18 @@ def process_image_with_ocr(image_path: str):
     date_row_pattern = re.compile(r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2}")
     time_range_pattern = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
     all_day_pattern = re.compile(r"All day event", re.IGNORECASE)
-    junk_leading_patterns = [
-        re.compile(r"^\d{1,2}\s*[A-Z]{3}\s*\|\s*"), # e.g. "22 MON | "
-        re.compile(r"^\d{1,2}\s*\|\s*"),            # e.g. "22 | "
-        re.compile(r"^\|\s*"),                        # e.g. " | "
-        re.compile(r"^\\\s*\d{1,2}\)\s*[A-Z]{3}\s*\|\s*"), # e.g. "\ 24) WED | "
-    ]
-
+    
     parsed_events = []
     current_date_str = None
-    for idx, row_text in enumerate(rows):
-        row_text = row_text.strip()
+    for idx, row_words in enumerate(rows):
+        # Reconstruct row text for date row check
+        row_text_full = ' '.join([w['text'] for w in row_words]).strip()
         # Check for date row
-        if date_row_pattern.match(row_text):
-            logger.info(f"Date row detected: {row_text}")
+        if date_row_pattern.match(row_text_full):
+            logger.info(f"Date row detected: {row_text_full}")
             # Parse date
             try:
-                current_date_str = datetime.strptime(row_text, "%A, %B %d").replace(year=datetime.now().year).strftime("%Y-%m-%d")
+                current_date_str = datetime.strptime(row_text_full, "%A, %B %d").replace(year=datetime.now().year).strftime("%Y-%m-%d")
             except Exception:
                 # Fallback: ignore date row if can't parse
                 continue
@@ -268,9 +295,9 @@ def process_image_with_ocr(image_path: str):
         if not current_date_str:
             continue
 
-        # Remove leading junk
-        for pat in junk_leading_patterns:
-            row_text = pat.sub("", row_text)
+        # For event rows, discard words with x < 120
+        event_row_words = [w for w in row_words if w['x'] >= 120]
+        row_text = ' '.join([w['text'] for w in event_row_words]).strip()
 
         # Check for time range or all day event
         time_match = time_range_pattern.search(row_text)

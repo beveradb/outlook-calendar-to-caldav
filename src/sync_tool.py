@@ -4,7 +4,8 @@ from src.outlook_automation import launch_outlook, navigate_to_calendar, capture
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
 from src.models.calendar_data import SyncState, ParsedEvent # Import ParsedEvent here
-from src.utils.logger import setup_logging
+from src.utils.logger import setup_logging, log_pushbullet_attempt
+from src.lib.pushbullet_notify import send_pushbullet_notification
 import time
 from typing import Callable, TypeVar
 import logging
@@ -61,12 +62,20 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
     Returns:
         True if sync is successful, False otherwise
     """
+    notification_sent = False
+    def send_notification_once(api_key, message, title):
+        nonlocal notification_sent
+        if api_key and not notification_sent:
+            result = send_pushbullet_notification(api_key, message, title)
+            log_pushbullet_attempt(message, str(result))
+            notification_sent = True
+        return notification_sent
+
     try:
         # 1. Load configuration
         config = Config.load_from_file(config_filepath)
         logger.setLevel(config.log_level.upper())
         logger.info("Configuration loaded successfully.")
-
 
         # 2. Initialize CalDAV client and SyncState
         logger.info("Initializing CalDAV client and SyncState...")
@@ -94,15 +103,24 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
             else:
                 logger.error(f"Failed to delete event {uid}.")
                 logger.critical("Aborting sync due to failed event deletion.")
+                send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                      f"Outlook to CalDAV sync failed: Could not delete event {uid}",
+                                      "Calendar Sync")
                 return False
 
         # 4. Launch Outlook and navigate to calendar
         logger.info("Launching Outlook and navigating to calendar...")
         if not _retry(launch_outlook, retries=3, delay=5):
             logger.error("Failed to launch Outlook after multiple retries.")
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  "Outlook to CalDAV sync failed: Could not launch Outlook",
+                                  "Calendar Sync")
             return False
         if not _retry(navigate_to_calendar, retries=3, delay=5):
             logger.error("Failed to navigate to Outlook calendar after multiple retries.")
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  "Outlook to CalDAV sync failed: Could not navigate to calendar",
+                                  "Calendar Sync")
             return False
         logger.info("Outlook launched and navigated to calendar.")
 
@@ -112,6 +130,9 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
         logger.info(f"Capturing screenshot to {screenshot_path}...")
         if not _retry(lambda: capture_screenshot(screenshot_path), retries=3, delay=5):
             logger.error("Failed to capture screenshot after multiple retries.")
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  "Outlook to CalDAV sync failed: Could not capture screenshot",
+                                  "Calendar Sync")
             return False
         logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
 
@@ -125,6 +146,9 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
         if not parsed_events:
             logger.info("No valid calendar events found in OCR output.")
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  "Outlook to CalDAV synced successfully, 0 events created",
+                                  "Calendar Sync")
             return True # No event to sync, consider it a success
         logger.info(f"Parsed {len(parsed_events)} event(s) from OCR output.")
 
@@ -137,12 +161,9 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
 
             caldav_uid = sync_state.get_caldav_id(parsed_event.original_source_id)
 
-
             # Ensure caldav_uid is always a string
             uid_to_use = caldav_uid if isinstance(caldav_uid, str) and caldav_uid else parsed_event.original_source_id
-            if caldav_uid:
-                logger.info(f"Updating existing CalDAV event: {uid_to_use} for {parsed_event.title}")
-            else:
+            if not caldav_uid:
                 logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
                 caldav_uid = uid_to_use # For new events, UID is the outlook_id
             put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
@@ -154,17 +175,50 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
                 logger.error(f"Failed to sync event '{parsed_event.title}'.")
                 all_success = False
         logger.info("Sync state recorded.")
+        # Send notification after sync attempt
+        if all_success:
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  f"Outlook to CalDAV synced successfully, {len(parsed_events)} events created",
+                                  "Calendar Sync")
+        else:
+            send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                  "Outlook to CalDAV sync completed with errors.",
+                                  "Calendar Sync")
         return all_success
 
     except FileNotFoundError as e:
         logger.error(f"Configuration or image file error: {e}")
+        try:
+            config = Config.load_from_file(config_filepath)
+            api_key = getattr(config, "pushbullet_api_key", None)
+        except Exception:
+            api_key = None
+        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except ValueError as e:
         logger.error(f"Configuration or parsing error: {e}")
+        try:
+            config = Config.load_from_file(config_filepath)
+            api_key = getattr(config, "pushbullet_api_key", None)
+        except Exception:
+            api_key = None
+        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except RuntimeError as e:
         logger.error(f"Runtime error during sync: {e}")
+        try:
+            config = Config.load_from_file(config_filepath)
+            api_key = getattr(config, "pushbullet_api_key", None)
+        except Exception:
+            api_key = None
+        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except Exception as e:
         logger.critical(f"An unexpected error occurred: {e}", exc_info=True)
+        try:
+            config = Config.load_from_file(config_filepath)
+            api_key = getattr(config, "pushbullet_api_key", None)
+        except Exception:
+            api_key = None
+        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False

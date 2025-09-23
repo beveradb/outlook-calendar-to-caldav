@@ -17,6 +17,7 @@ class Config:
     log_level: str = "INFO"
     sync_state_filepath: str = "specs/002-synchronise-outlook-work/sync_state.json"
     verify_ssl: bool = True
+    pushbullet_api_key: Optional[str] = None
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':
@@ -40,6 +41,9 @@ class Config:
             # Default verify_ssl to True if not present
             if "verify_ssl" not in config_data:
                 config_data["verify_ssl"] = True
+            # Default pushbullet_api_key to None if not present
+            if "pushbullet_api_key" not in config_data:
+                config_data["pushbullet_api_key"] = None
             return cls(**config_data)
         except FileNotFoundError:
             raise FileNotFoundError(f"Config file not found at {filepath}")

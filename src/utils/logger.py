@@ -37,5 +37,15 @@ def setup_logging(log_level: str = "INFO", log_file: str = "calendar_sync.log"):
 
     return logging.getLogger(__name__)
 
+
 # Initialize a default logger for modules that might import it directly
 logger = setup_logging()
+
+def log_pushbullet_attempt(message: str, result: str):
+    """
+    Log Pushbullet notification attempt and result.
+    Args:
+        message: The notification message attempted
+        result: The result or error string from the attempt
+    """
+    logger.info(f"Pushbullet notification log: message='{message}', result='{result}'")

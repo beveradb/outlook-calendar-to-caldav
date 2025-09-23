@@ -72,7 +72,8 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
        "sync_interval_minutes": 15,
        "log_level": "INFO",
        "sync_state_filepath": "sync_state.json",
-       "verify_ssl": false
+       "verify_ssl": false,
+       "pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"
     }
     # Set "verify_ssl": false to disable SSL certificate verification (for self-signed/test servers)
    ```
@@ -80,6 +81,19 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
    - `caldav_username`/`caldav_password`: CalDAV credentials
    - `outlook_calendar_name`: Name of the Outlook calendar to sync
    - `sync_state_filepath`: Path to the sync state file (tracks idempotency)
+   - `pushbullet_api_key`: (Optional) Your Pushbullet API key. If set, notifications will be sent to your Pushbullet account on successful sync or error.
+### Pushbullet Notifications
+
+If you want to receive push notifications on your devices when a sync completes or fails:
+
+1. Get your Pushbullet API key from https://www.pushbullet.com/#settings
+2. Add it to your `config.json` as `"pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"`
+3. On successful sync, you'll receive a notification like:
+   - "Outlook to CalDAV synced successfully, X events created"
+4. On error, you'll receive a notification with the error message.
+5. If the API key is not set, no notifications will be sent.
+
+**Security Note:** Your API key is sensitive. Do not share or commit it to public repositories.
 
 2. **(Optional) Prepare sync state file:**
    - The tool will create/update this file automatically (default: `sync_state.json`)

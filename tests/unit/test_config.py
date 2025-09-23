@@ -65,6 +65,7 @@ def test_config_load_from_file_invalid_json():
         Config.load_from_file(TEST_CONFIG_FILE)
 
 def test_config_save_to_file():
+
     config = Config(
         caldav_url="http://localhost:8000/caldav/",
         caldav_username="testuser",
@@ -72,13 +73,14 @@ def test_config_save_to_file():
         outlook_calendar_name="Calendar",
         sync_interval_minutes=30,
         log_level="DEBUG",
-        sync_state_filepath="specs/002-synchronise-outlook-work/sync_state.json"
+        sync_state_filepath="specs/002-synchronise-outlook-work/sync_state.json",
+        pushbullet_api_key="test_api_key"
     )
     config.save_to_file(TEST_CONFIG_FILE)
-    
+
     with open(TEST_CONFIG_FILE, 'r') as f:
         saved_data = json.load(f)
-        
+
     assert saved_data["caldav_url"] == config.caldav_url
     assert saved_data["caldav_username"] == config.caldav_username
     assert saved_data["caldav_password"] == config.caldav_password
@@ -86,3 +88,18 @@ def test_config_save_to_file():
     assert saved_data["sync_interval_minutes"] == config.sync_interval_minutes
     assert saved_data["log_level"] == config.log_level
     assert saved_data["sync_state_filepath"] == config.sync_state_filepath
+    assert saved_data["pushbullet_api_key"] == config.pushbullet_api_key
+
+
+# New test for Pushbullet API key loading
+def test_config_loads_pushbullet_api_key():
+    config_data = {
+        "caldav_url": "http://localhost:8000/caldav/",
+        "caldav_username": "testuser",
+        "caldav_password": "testpass",
+        "outlook_calendar_name": "Calendar",
+        "pushbullet_api_key": "test_api_key"
+    }
+    create_test_config(config_data)
+    config = Config.load_from_file(TEST_CONFIG_FILE)
+    assert config.pushbullet_api_key == "test_api_key"
