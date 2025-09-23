@@ -34,8 +34,8 @@ Schedule
 
     1. Copy the launchd plist:
         ```sh
-        cp scripts/com.yourorg.outlook-caldav-sync.plist ~/Library/LaunchAgents/
-        launchctl load ~/Library/LaunchAgents/com.yourorg.outlook-caldav-sync.plist
+        cp scripts/com.beveradb.outlook-caldav-sync.plist ~/Library/LaunchAgents/
+        launchctl load ~/Library/LaunchAgents/com.beveradb.outlook-caldav-sync.plist
         ```
     2. Edit the interval or paths in the plist as needed.
     3. Logs will appear in `sync_launchd.log` in the project root.

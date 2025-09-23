@@ -21,12 +21,12 @@ python3 /Users/AK17/Projects/calendar-sync/sync_outlook_caldav.py --config /User
 
 ## 2. Using launchd (macOS only, robust)
 
-- File: `scripts/com.yourorg.outlook-caldav-sync.plist`
+- File: `scripts/com.beveradb.outlook-caldav-sync.plist`
 - Copy this file to `~/Library/LaunchAgents/` and load it with:
 
 ```sh
-cp scripts/com.yourorg.outlook-caldav-sync.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.yourorg.outlook-caldav-sync.plist
+cp scripts/com.beveradb.outlook-caldav-sync.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.beveradb.outlook-caldav-sync.plist
 ```
 
 - By default, runs every 1800 seconds (30 minutes). Edit `<integer>1800</integer>` to change interval.
@@ -34,7 +34,7 @@ launchctl load ~/Library/LaunchAgents/com.yourorg.outlook-caldav-sync.plist
 - Unload with:
 
 ```sh
-launchctl unload ~/Library/LaunchAgents/com.yourorg.outlook-caldav-sync.plist
+launchctl unload ~/Library/LaunchAgents/com.beveradb.outlook-caldav-sync.plist
 ```
 
 ## Customization
