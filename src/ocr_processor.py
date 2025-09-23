@@ -283,9 +283,11 @@ def process_image_with_ocr(image_path: str):
         # Check for date row
         if date_row_pattern.match(row_text_full):
             logger.info(f"Date row detected: {row_text_full}")
-            # Parse date
+            # Parse date, always specify year to avoid ambiguity
             try:
-                current_date_str = datetime.strptime(row_text_full, "%A, %B %d").replace(year=datetime.now().year).strftime("%Y-%m-%d")
+                # Assume current year if not present
+                current_year = datetime.now().year
+                current_date_str = datetime.strptime(f"{row_text_full} {current_year}", "%A, %B %d %Y").strftime("%Y-%m-%d")
             except Exception:
                 # Fallback: ignore date row if can't parse
                 continue

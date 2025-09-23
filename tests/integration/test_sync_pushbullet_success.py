@@ -35,7 +35,7 @@ def test_sync_triggers_pushbullet_success(patch_pushbullet_notify):
     # You may need to adapt this if sync_outlook_to_caldav signature changes
     try:
         # You may want to mock file loading if needed
-        sync_outlook_to_caldav(config_filepath="config.json", current_date="2025-09-23")
+        sync_outlook_to_caldav(config_filepath="config.json", current_date="2025-09-23", notification_func=patch_pushbullet_notify.send)
     except Exception:
         pass
     assert patch_pushbullet_notify.sent

@@ -53,7 +53,7 @@ def resolve_conflict(outlook_event: ParsedEvent, caldav_event_ical: str) -> Pars
     # As per requirements, Outlook always wins in conflict resolution.
     return outlook_event
 
-def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
+def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification_func=send_pushbullet_notification) -> bool:
     """
     Orchestrate the synchronization of Outlook calendar events to CalDAV.
     Args:
@@ -66,7 +66,7 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
     def send_notification_once(api_key, message, title):
         nonlocal notification_sent
         if api_key and not notification_sent:
-            result = send_pushbullet_notification(api_key, message, title)
+            result = notification_func(api_key, message, title)
             log_pushbullet_attempt(message, str(result))
             notification_sent = True
         return notification_sent
@@ -193,7 +193,7 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
             api_key = getattr(config, "pushbullet_api_key", None)
         except Exception:
             api_key = None
-        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
+        notification_func(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except ValueError as e:
         logger.error(f"Configuration or parsing error: {e}")
@@ -202,7 +202,7 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
             api_key = getattr(config, "pushbullet_api_key", None)
         except Exception:
             api_key = None
-        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
+        notification_func(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except RuntimeError as e:
         logger.error(f"Runtime error during sync: {e}")
@@ -211,7 +211,7 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
             api_key = getattr(config, "pushbullet_api_key", None)
         except Exception:
             api_key = None
-        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
+        notification_func(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
     except Exception as e:
         logger.critical(f"An unexpected error occurred: {e}", exc_info=True)
@@ -220,5 +220,5 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
             api_key = getattr(config, "pushbullet_api_key", None)
         except Exception:
             api_key = None
-        send_pushbullet_notification(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
+        notification_func(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
