@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
+from PIL import Image
+import pytesseract
 
 @dataclass
 class ParsedEvent:
@@ -113,3 +115,14 @@ def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEven
         description=description,
         confidence_score=0.8 # Placeholder
     )
+
+def process_image_with_ocr(image_path: str) -> str:
+    """Processes an image with OCR to extract text."""
+    try:
+        img = Image.open(image_path)
+        text = pytesseract.image_to_string(img)
+        return text
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Image file not found at {image_path}")
+    except Exception as e:
+        raise RuntimeError(f"Error during OCR processing: {e}")

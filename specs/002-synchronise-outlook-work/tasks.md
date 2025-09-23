@@ -36,19 +36,19 @@
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
 - [x] T004 [P] Contract test CalDAV PUT operation in `tests/contract/test_caldav_put.py` (using a mock/test CalDAV server)
-- [ ] T005 [P] Unit test OCR parsing logic for event fields in `tests/unit/test_ocr_parsing.py`
-- [ ] T006 [P] Unit test event mapping to CalDAV format in `tests/unit/test_event_mapping.py`
-- [ ] T007 [FLAKY] Integration test Outlook UI automation (launch, navigate, screenshot) in `tests/integration/test_outlook_ui.py`
-- [ ] T008 [P] Unit test idempotency logic in `tests/unit/test_sync_state.py`
-- [ ] T009 [P] Unit test conflict resolution logic in `tests/unit/test_conflict_resolution.py`
+- [x] T005 [P] Unit test OCR parsing logic for event fields in `tests/unit/test_ocr_parsing.py`
+- [x] T006 [P] Unit test event mapping to CalDAV format in `tests/unit/test_event_mapping.py`
+- [x] T007 [FLAKY] Integration test Outlook UI automation (launch, navigate, screenshot) in `tests/integration/test_outlook_ui.py`
+- [x] T008 [P] Unit test idempotency logic in `tests/unit/test_sync_state.py`
+- [x] T009 [P] Unit test conflict resolution logic in `tests/unit/test_conflict_resolution.py`
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T010 [P] Implement `ParsedEvent` and `SyncState` data models in `src/models/calendar_data.py`
-- [ ] T011 [P] Implement `config.json` loading and validation in `src/config.py`
-- [ ] T012 Implement macOS UI automation functions (launch, foreground, maximise, navigate Outlook) in `src/outlook_automation.py`
-- [ ] T013 Implement screenshot capture function in `src/outlook_automation.py`
-- [ ] T014 Implement OCR processing function in `src/ocr_processor.py`
-- [ ] T015 Implement event parsing from OCR output in `src/ocr_processor.py`
+- [x] T010 [P] Implement `ParsedEvent` and `SyncState` data models in `src/models/calendar_data.py`
+- [x] T011 [P] Implement `config.json` loading and validation in `src/config.py`
+- [x] T012 Implement macOS UI automation functions (launch, foreground, maximise, navigate Outlook) in `src/outlook_automation.py`
+- [x] T013 Implement screenshot capture function in `src/outlook_automation.py`
+- [x] T014 Implement OCR processing function in `src/ocr_processor.py`
+- [x] T015 Implement event parsing from OCR output in `src/ocr_processor.py`
 - [ ] T016 Implement CalDAV client for event creation/update in `src/caldav_client.py`
 - [ ] T017 Implement main sync orchestration logic in `src/sync_tool.py`
 
