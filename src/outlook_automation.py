@@ -93,7 +93,6 @@ def navigate_to_calendar() -> bool:
             print(f"Error navigating to calendar via menu: {menu_e}")
             return False
 
-
 def capture_screenshot(filepath: str) -> bool:
     """
     Capture a screenshot of the active window and save it to the specified filepath.

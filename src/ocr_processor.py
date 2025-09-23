@@ -4,6 +4,7 @@ import re
 import os
 from PIL import Image
 import pytesseract
+from src.utils.logger import logger
 
 
 @dataclass
@@ -141,16 +142,6 @@ def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEven
 
 
 def process_image_with_ocr(image_path: str):
-    """
-    Run OCR on an image file and return detailed word-level data (bounding boxes, text, line numbers).
-    Args:
-        image_path: Path to the image file
-    Returns:
-        List of dicts with keys: 'text', 'left', 'top', 'width', 'height', 'conf', 'line_num', 'word_num'
-    Raises:
-        FileNotFoundError if the image file does not exist
-        RuntimeError for other OCR errors
-    """
     from src.utils.logger import logger
     try:
         img = Image.open(image_path)
@@ -158,10 +149,23 @@ def process_image_with_ocr(image_path: str):
         logger.error(f"Could not open image {image_path}: {e}")
         return []
 
+    # Convert to grayscale and enhance contrast
+    img = img.convert('L')  # Grayscale
+    threshold = 60
+    img = img.point([255 if i > threshold else 0 for i in range(256)])
+
+    # Save the processed image for manual review
+    processed_path = image_path.replace('.png', '_bw.png')
+    try:
+        img.save(processed_path)
+        logger.debug(f"High-contrast image saved to {processed_path}")
+    except Exception as e:
+        logger.error(f"Could not save high-contrast image: {e}")
+
     ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
     n_boxes = len(ocr_data['level'])
     words = []
-    logger.debug("Raw OCR word data:")
+    # Collect words first
     for i in range(n_boxes):
         word = ocr_data['text'][i].strip()
         if not word:
@@ -173,41 +177,69 @@ def process_image_with_ocr(image_path: str):
             'width': ocr_data['width'][i],
             'height': ocr_data['height'][i]
         }
-        logger.debug(f"Word: {word_data}")
         words.append(word_data)
 
-    # Cluster words into bins by y-coordinate (within 20px)
-    row_bins = []  # Each bin is a list of words
-    bin_threshold = 20  # px
-    for w in words:
-        placed = False
-        for bin in row_bins:
-            bin_center_y = sum(word['y'] for word in bin) / len(bin)
-            if abs(w['y'] - bin_center_y) <= bin_threshold:
-                bin.append(w)
-                placed = True
-                break
-        if not placed:
-            row_bins.append([w])
+    # Sort words by y before logging
+    words_for_log = sorted(words, key=lambda w: w['y'])
+    logger.debug("Raw OCR word data:")
+    for w in words_for_log:
+        y_min = w['y']
+        y_max = w['y'] + w['height']
+        logger.debug(f"Word: {{'text': '{w['text']}', 'x': {w['x']}, 'y_min': {y_min}, 'y_max': {y_max}, 'width': {w['width']}, 'height': {w['height']}}}")
 
-    # Sort row bins by their minimum y-coordinate (top to bottom)
-    row_bins_sorted = sorted(row_bins, key=lambda bin: min(w['y'] for w in bin))
+    # --- New strict rule-based row identification ---
+    # 1. No row > 70px tall
+    # 2. At least 20px between rows
+    # 3. No row with only a single character
+
+    # Sort words by top y
+    words_sorted = sorted(words, key=lambda w: w['y'])
     rows = []
     ocr_crop_dir = os.path.join(os.path.dirname(image_path), "ocr_crops")
     os.makedirs(ocr_crop_dir, exist_ok=True)
-    for idx, bin in enumerate(row_bins_sorted, 1):
-        bin_sorted = sorted(bin, key=lambda wd: wd['x'])
-        row_text = " ".join([wd['text'] for wd in bin_sorted])
-        rows.append(row_text)
-        # Calculate y bounds for the row
-        y_min = min(w['y'] for w in bin)
-        y_max = max(w['y'] + w['height'] for w in bin)
-        # Log bounds
-        logger.debug(f"Row {idx}: y_min={y_min}, y_max={y_max}, text={row_text}")
-        # Save crop
-        if img:
-            crop_path = os.path.join(ocr_crop_dir, f"row_{idx:02d}.png")
-            crop_img = img.crop((0, y_min, img.width, y_max))
+
+
+    # --- Sweep-line/overlap row grouping ---
+    unused = [dict(w) for w in words_sorted]
+    last_y_max = None
+    row_idx = 1
+    while unused:
+        # Start new row with lowest y_min
+        unused.sort(key=lambda w: w['y'])
+        seed = unused.pop(0)
+        row_y_min = int(seed['y'])
+        window_max = row_y_min + 62
+        row_words = [seed]
+        to_remove = []
+        for w in unused:
+            w_y_min = int(w['y'])
+            if row_y_min <= w_y_min <= window_max:
+                row_words.append(w)
+                to_remove.append(w)
+        for w in to_remove:
+            unused.remove(w)
+        if row_words:
+            max_y_max = max(int(w['y']) + int(w['height']) for w in row_words)
+            row_y_max = min(window_max, max_y_max)
+            row_height = row_y_max - row_y_min
+            row_words_sorted = sorted(row_words, key=lambda w: w['x'])
+            row_text = ' '.join([w['text'] for w in row_words_sorted])
+            if row_height > 62:
+                logger.error(f"Row too tall: y_min={row_y_min}, y_max={row_y_max}, height={row_height}, words={[w['text'] for w in row_words_sorted]}")
+                raise ValueError(f"Row too tall: {row_height}px. Words: {[w['text'] for w in row_words_sorted]}")
+            if len(row_text) == 1:
+                logger.error(f"Row contains only a single character: y_min={row_y_min}, y_max={row_y_max}, words={[w['text'] for w in row_words_sorted]}")
+                raise ValueError(f"Row contains only a single character. Words: {[w['text'] for w in row_words_sorted]}")
+            if last_y_max is not None and row_y_min - last_y_max < 5:
+                logger.error(f"Gap between rows too small: prev_y_max={last_y_max}, curr_y_min={row_y_min}, gap={row_y_min - last_y_max}")
+                raise ValueError(f"Gap between rows too small: {row_y_min - last_y_max}px")
+            crop_path = os.path.join(ocr_crop_dir, f"row_{row_idx:02d}.png")
+            crop_img = img.crop((0, float(row_y_min), float(img.width), float(row_y_max)))
             crop_img.save(crop_path)
-            logger.debug(f"Row {idx}: cropped image saved to {crop_path}")
+            logger.debug(f"Row {row_idx}: y_min={row_y_min}, y_max={row_y_max}, text={row_text}")
+            logger.debug(f"Row {row_idx}: cropped image saved to {crop_path}")
+            rows.append(row_text)
+            last_y_max = row_y_max
+            row_idx += 1
+
     return rows
