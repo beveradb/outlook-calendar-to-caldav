@@ -16,7 +16,8 @@ def test_map_parsed_event_to_ical_basic_event():
         title="Meeting with John",
         location="Conference Room 3",
         description="Project discussion",
-        confidence_score=0.9
+        confidence_score=0.9,
+        _ical_timezone="UTC"
     )
 
     # Expected iCalendar output (simplified for contract test)

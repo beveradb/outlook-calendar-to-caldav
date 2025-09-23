@@ -8,8 +8,10 @@ from src.utils.logger import setup_logging
 import time
 from typing import Callable, TypeVar
 import logging
+import urllib3
 
 logger = setup_logging()
+urllib3.disable_warnings()
 
 R = TypeVar('R')
 
@@ -65,42 +67,8 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
         logger.setLevel(config.log_level.upper())
         logger.info("Configuration loaded successfully.")
 
-        # 2. Launch Outlook and navigate to calendar
-        logger.info("Launching Outlook and navigating to calendar...")
-        if not _retry(launch_outlook, retries=3, delay=5):
-            logger.error("Failed to launch Outlook after multiple retries.")
-            return False
-        if not _retry(navigate_to_calendar, retries=3, delay=5):
-            logger.error("Failed to navigate to Outlook calendar after multiple retries.")
-            return False
-        logger.info("Outlook launched and navigated to calendar.")
 
-        # 3. Capture screenshot
-        screenshot_path = "outlook_calendar_screenshot.png"
-        cropped_path = "outlook_calendar_screenshot_cropped.png"
-        logger.info(f"Capturing screenshot to {screenshot_path}...")
-        if not _retry(lambda: capture_screenshot(screenshot_path), retries=3, delay=5):
-            logger.error("Failed to capture screenshot after multiple retries.")
-            return False
-        logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
-
-        # 4. Process cropped screenshot with OCR to parse events
-        logger.info("Processing cropped screenshot with OCR...")
-        ocr_rows = process_image_with_ocr(cropped_path)
-        # Log each row for manual validation
-        logger.debug("OCR output by row:")
-        for idx, row in enumerate(ocr_rows, 1):
-            logger.debug(f"Row {idx}: {row}")
-        # Inform user to check logs for raw OCR word data and row grouping
-        logger.error("Manual validation required: review raw OCR word data and row output in logs. Advise on event parsing rules if grouping looks correct.")
-        return False
-
-        if not parsed_event:
-            logger.info("No event found in OCR output.")
-            return True # No event to sync, consider it a success
-        logger.info(f"Parsed event: {parsed_event.title}")
-
-        # 5. Initialize CalDAV client and SyncState
+        # 2. Initialize CalDAV client and SyncState
         logger.info("Initializing CalDAV client and SyncState...")
         caldav_client = CalDAVClient(
             config.caldav_url,
@@ -111,41 +79,82 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str) -> bool:
         sync_state = SyncState(config.sync_state_filepath)
         logger.info("CalDAV client and SyncState initialized.")
 
-        # 6. Fetch existing CalDAV events (simplified for now)
+        # 3. Fetch and delete all existing CalDAV events
         logger.info("Fetching existing CalDAV events...")
         existing_caldav_events = _retry(caldav_client.get_events, retries=3, delay=5)
         assert existing_caldav_events is not None # Explicit assertion for linter
         logger.info(f"Fetched {len(existing_caldav_events)} existing CalDAV events.")
 
-        # 7. Compare and resolve conflicts (Outlook wins)
+        # Delete all events before syncing new ones
+        for uid in existing_caldav_events.keys():
+            logger.info(f"Deleting CalDAV event: {uid}")
+            del_success = _retry(lambda: caldav_client.delete_event(uid), retries=3, delay=5)
+            if del_success:
+                logger.info(f"Event {uid} deleted successfully.")
+            else:
+                logger.error(f"Failed to delete event {uid}.")
+                logger.critical("Aborting sync due to failed event deletion.")
+                return False
 
-        ical_data = map_parsed_event_to_ical(parsed_event)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"iCalendar payload to be sent:\n{ical_data}")
-
-        caldav_uid = sync_state.get_caldav_id(parsed_event.original_source_id)
-
-        if caldav_uid:
-            logger.info(f"Updating existing CalDAV event: {caldav_uid}")
-            response = _retry(lambda: caldav_client.put_event(caldav_uid, ical_data), retries=3, delay=5)
-        else:
-            logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.original_source_id}")
-            response = _retry(lambda: caldav_client.put_event(parsed_event.original_source_id, ical_data), retries=3, delay=5)
-            caldav_uid = parsed_event.original_source_id # For new events, UID is the outlook_id
-
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"CalDAV PUT response status: {response.status_code}")
-            logger.debug(f"CalDAV PUT response body: {response.text}")
-
-        if response.status_code in [200, 201, 204]:
-            logger.info(f"Event synced successfully. CalDAV UID: {caldav_uid}")
-            # 8. Record sync state
-            sync_state.record_sync(parsed_event.original_source_id, caldav_uid)
-            logger.info("Sync state recorded.")
-            return True
-        else:
-            logger.error(f"Failed to sync event. Status code: {response.status_code}, Response: {response.text}")
+        # 4. Launch Outlook and navigate to calendar
+        logger.info("Launching Outlook and navigating to calendar...")
+        if not _retry(launch_outlook, retries=3, delay=5):
+            logger.error("Failed to launch Outlook after multiple retries.")
             return False
+        if not _retry(navigate_to_calendar, retries=3, delay=5):
+            logger.error("Failed to navigate to Outlook calendar after multiple retries.")
+            return False
+        logger.info("Outlook launched and navigated to calendar.")
+
+        # 5. Capture screenshot
+        screenshot_path = "outlook_calendar_screenshot.png"
+        cropped_path = "outlook_calendar_screenshot_cropped.png"
+        logger.info(f"Capturing screenshot to {screenshot_path}...")
+        if not _retry(lambda: capture_screenshot(screenshot_path), retries=3, delay=5):
+            logger.error("Failed to capture screenshot after multiple retries.")
+            return False
+        logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
+
+        # 6. Process cropped screenshot with OCR to get parsed events
+        logger.info("Processing cropped screenshot with OCR...")
+        parsed_events = process_image_with_ocr(cropped_path)
+        # Log each event for manual validation
+        logger.debug("Parsed events from OCR:")
+        for idx, event in enumerate(parsed_events, 1):
+            logger.debug(f"Event {idx}: {event}")
+
+        if not parsed_events:
+            logger.info("No valid calendar events found in OCR output.")
+            return True # No event to sync, consider it a success
+        logger.info(f"Parsed {len(parsed_events)} event(s) from OCR output.")
+
+        # 7. Sync all parsed events
+        all_success = True
+        for parsed_event in parsed_events:
+            ical_data = map_parsed_event_to_ical(parsed_event)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"iCalendar payload to be sent for {parsed_event.title}:\n{ical_data}")
+
+            caldav_uid = sync_state.get_caldav_id(parsed_event.original_source_id)
+
+
+            # Ensure caldav_uid is always a string
+            uid_to_use = caldav_uid if isinstance(caldav_uid, str) and caldav_uid else parsed_event.original_source_id
+            if caldav_uid:
+                logger.info(f"Updating existing CalDAV event: {uid_to_use} for {parsed_event.title}")
+            else:
+                logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
+                caldav_uid = uid_to_use # For new events, UID is the outlook_id
+            put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
+
+            if put_success:
+                logger.info(f"Event '{parsed_event.title}' synced successfully. CalDAV UID: {caldav_uid}")
+                sync_state.record_sync(parsed_event.original_source_id, caldav_uid)
+            else:
+                logger.error(f"Failed to sync event '{parsed_event.title}'.")
+                all_success = False
+        logger.info("Sync state recorded.")
+        return all_success
 
     except FileNotFoundError as e:
         logger.error(f"Configuration or image file error: {e}")

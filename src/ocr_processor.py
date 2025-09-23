@@ -7,18 +7,7 @@ import pytesseract
 from src.utils.logger import logger
 
 
-@dataclass
-class ParsedEvent:
-    """
-    Represents a calendar event parsed from OCR output.
-    """
-    original_source_id: str
-    start_datetime: str
-    end_datetime: str
-    title: str
-    location: str | None = None
-    description: str | None = None
-    confidence_score: float = 0.0
+from src.models.calendar_data import ParsedEvent
 
 
 def _is_location_line(line: str) -> bool:
@@ -147,11 +136,11 @@ def process_image_with_ocr(image_path: str):
         img = Image.open(image_path)
     except Exception as e:
         logger.error(f"Could not open image {image_path}: {e}")
-        return []
+        raise FileNotFoundError(f"Image file not found at {image_path}")
 
     # Convert to grayscale and enhance contrast
     img = img.convert('L')  # Grayscale
-    threshold = 60
+    threshold = 50
     img = img.point([255 if i > threshold else 0 for i in range(256)])
 
     # Save the processed image for manual review
@@ -242,4 +231,92 @@ def process_image_with_ocr(image_path: str):
             last_y_max = row_y_max
             row_idx += 1
 
-    return rows
+    # --- Event parsing and cleanup ---
+    # Rules:
+    # - Date rows: "Monday, September 22" etc. (not events)
+    # - Event rows: must have time range "HH:MM - HH:MM" or "All day event"
+    # - Remove leading junk: e.g. "22 MON | ", "22 | ", " | ", "\\ 24) WED | "
+    # - Event title: text before time or "All day event"
+    # - Discard trailing text after time
+
+    date_row_pattern = re.compile(r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2}")
+    time_range_pattern = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
+    all_day_pattern = re.compile(r"All day event", re.IGNORECASE)
+    junk_leading_patterns = [
+        re.compile(r"^\d{1,2}\s*[A-Z]{3}\s*\|\s*"), # e.g. "22 MON | "
+        re.compile(r"^\d{1,2}\s*\|\s*"),            # e.g. "22 | "
+        re.compile(r"^\|\s*"),                        # e.g. " | "
+        re.compile(r"^\\\s*\d{1,2}\)\s*[A-Z]{3}\s*\|\s*"), # e.g. "\ 24) WED | "
+    ]
+
+    parsed_events = []
+    current_date_str = None
+    for idx, row_text in enumerate(rows):
+        row_text = row_text.strip()
+        # Check for date row
+        if date_row_pattern.match(row_text):
+            logger.info(f"Date row detected: {row_text}")
+            # Parse date
+            try:
+                current_date_str = datetime.strptime(row_text, "%A, %B %d").replace(year=datetime.now().year).strftime("%Y-%m-%d")
+            except Exception:
+                # Fallback: ignore date row if can't parse
+                continue
+            continue
+
+        # Only parse event rows if we have a current date
+        if not current_date_str:
+            continue
+
+        # Remove leading junk
+        for pat in junk_leading_patterns:
+            row_text = pat.sub("", row_text)
+
+        # Check for time range or all day event
+        time_match = time_range_pattern.search(row_text)
+        all_day_match = all_day_pattern.search(row_text)
+        if not time_match and not all_day_match:
+            logger.error(f"Unable to parse event row: {row_text}")
+            raise ValueError(f"Unable to parse event row: {row_text}")
+
+        # Extract event title and times
+        title = None
+        start_time = None
+        end_time = None
+        if time_match:
+            title = row_text[:time_match.start()].strip()
+            start_time = time_match.group(1)
+            end_time = time_match.group(2)
+        elif all_day_match:
+            idx = row_text.lower().find("all day event")
+            # Extract title after 'All day event'
+            title = row_text[idx + len("all day event"):].strip() if idx != -1 else row_text.strip()
+            start_time = "00:00"
+            end_time = "23:59"
+        else:
+            # Should not reach here due to earlier check, but guard for safety
+            logger.error(f"Unable to parse event row: {row_text}")
+            continue
+
+        # Sanitize title and UID to remove problematic characters (e.g., forward slash)
+        def sanitize(s: str) -> str:
+            # Replace / and \ with - and remove control characters
+            return re.sub(r'[\\/]', '-', s).strip()
+
+        safe_title = sanitize(title)
+        safe_uid = sanitize(f"{current_date_str}-{start_time}-{safe_title}")
+        start_dt = f"{current_date_str}T{start_time}:00"
+        end_dt = f"{current_date_str}T{end_time}:00"
+        event_obj = ParsedEvent(
+            original_source_id=safe_uid,
+            start_datetime=start_dt,
+            end_datetime=end_dt,
+            title=safe_title,
+            location=None,
+            description=None,
+            confidence_score=1.0
+        )
+        parsed_events.append(event_obj)
+        logger.info(f"Calendar event detected: {event_obj.start_datetime} - {event_obj.end_datetime} | {event_obj.title}")
+
+    return parsed_events
