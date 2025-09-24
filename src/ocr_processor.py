@@ -116,11 +116,7 @@ def parse_outlook_event_from_ocr(ocr_text: str, current_date: str) -> ParsedEven
     description = "\n".join(description_lines).strip() if description_lines else None
     if description == "": description = None
 
-    # Generate a simple original_source_id for now
-    original_source_id = f"{current_date}-{start_time_str}-{title}"
-
     return ParsedEvent(
-        original_source_id=original_source_id,
         start_datetime=start_datetime_obj.isoformat(timespec='seconds'),
         end_datetime=end_datetime_obj.isoformat(timespec='seconds'),
         title=title,
@@ -333,11 +329,9 @@ def process_image_with_ocr(image_path: str):
             return re.sub(r'[\\/]', '-', s).strip()
 
         safe_title = sanitize(title)
-        safe_uid = sanitize(f"{current_date_str}-{start_time}-{safe_title}")
         start_dt = f"{current_date_str}T{start_time}:00"
         end_dt = f"{current_date_str}T{end_time}:00"
         event_obj = ParsedEvent(
-            original_source_id=safe_uid,
             start_datetime=start_dt,
             end_datetime=end_dt,
             title=safe_title,

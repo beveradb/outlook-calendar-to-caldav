@@ -10,7 +10,6 @@ def test_resolve_conflict_outlook_wins():
     # This test will initially fail as resolve_conflict is not yet implemented
 
     outlook_event = ParsedEvent(
-        original_source_id="outlook_123",
         start_datetime="2025-09-23T10:00:00",
         end_datetime="2025-09-23T11:00:00",
         title="Outlook Meeting",

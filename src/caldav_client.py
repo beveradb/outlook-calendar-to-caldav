@@ -75,17 +75,18 @@ class CalDAVClient:
         except Exception as e:
             return False
 
-def map_parsed_event_to_ical(event: ParsedEvent) -> str:
+def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
     """
-    Convert a ParsedEvent object to an iCalendar (VCALENDAR) string.
+    Convert a ParsedEvent object to an iCalendar (VCALENDAR) string and generate a UID.
     Args:
         event: ParsedEvent instance
         timezone: 'America/New_York' (default) or 'UTC' for test compatibility
     Returns:
-        iCalendar string
+        Tuple of (iCalendar string, UID)
     """
     from datetime import datetime
     import pytz
+    import uuid
 
     def to_dt(dt_str, tz):
         dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S")
@@ -103,12 +104,13 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> str:
     dtstart = to_dt(event.start_datetime, timezone)
     dtend = to_dt(event.end_datetime, timezone)
 
+    event_uid = uuid.uuid4().hex[:12]
     ical_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Example Corp//Calendar Sync//EN",
         "BEGIN:VEVENT",
-        f"UID:{event.original_source_id}",
+        f"UID:{event_uid}",
     ]
     if timezone == "UTC":
         ical_lines.append(f"DTSTAMP:{dtstamp}")
@@ -129,4 +131,4 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> str:
         "END:VEVENT",
         "END:VCALENDAR"
     ])
-    return "\n".join(ical_lines)
+    return "\n".join(ical_lines), event_uid

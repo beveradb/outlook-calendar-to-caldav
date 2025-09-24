@@ -8,7 +8,7 @@
 1. Load plan.md from feature directory
    → Extract: Python 3.11, pyobjc, pillow, pytesseract, caldav, macOS, single project
 2. Load optional design documents:
-   → data-model.md: ParsedEvent, SyncState, Config schema
+   → data-model.md: ParsedEvent, Config schema
    → contracts/: caldav_event_contract (PUT endpoint)
    → research.md: OCR (pytesseract), Automation (pyobjc/osascript), CalDAV (caldav lib)
    → quickstart.md: Installation, configuration, dry-run, scheduling
@@ -43,7 +43,7 @@
 - [x] T009 [P] Unit test conflict resolution logic in `tests/unit/test_conflict_resolution.py`
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [x] T010 [P] Implement `ParsedEvent` and `SyncState` data models in `src/models/calendar_data.py`
+- [x] T010 [P] Implement `ParsedEvent` data model in `src/models/calendar_data.py`
 - [x] T011 [P] Implement `config.json` loading and validation in `src/config.py`
 - [x] T012 Implement macOS UI automation functions (launch, foreground, maximise, navigate Outlook) in `src/outlook_automation.py`
 - [x] T013 Implement screenshot capture function in `src/outlook_automation.py`
@@ -84,7 +84,7 @@
 # Task: "Unit test conflict resolution logic in tests/unit/test_conflict_resolution.py"
 
 # Launch T010, T011 together:
-# Task: "Implement ParsedEvent and SyncState data models in src/models/calendar_data.py"
+# Task: "Implement ParsedEvent data model in src/models/calendar_data.py"
 # Task: "Implement config.json loading and validation in src/config.py"
 
 # Launch T023, T024 together:
@@ -106,7 +106,7 @@
    - `caldav_event_contract.json` → T004 [P] Contract test CalDAV PUT operation
    
 2. **From Data Model**:
-   - `ParsedEvent`, `SyncState` → T010 [P] Implement data models
+   - `ParsedEvent`, → T010 [P] Implement data models
    - `Config schema` → T011 [P] Implement config loading/validation
    
 3. **From User Stories/Requirements**:

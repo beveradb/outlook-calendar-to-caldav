@@ -51,7 +51,6 @@
 ## Technical Context
 - **Language/Version**: Prefer Python 3.11 (scripting, available CalDAV libraries) or Swift/Objective-C for macOS-native automation. [DECISION: Python 3.11 chosen for initial PoC]
 - **Primary Dependencies**: `pyobjc` (for macOS accessibility/AppleScript interop) or `osascript` wrappers, `pillow` for image handling, `pytesseract` or `vision` bindings for OCR, `caldav` or `requests` for CalDAV interactions.
-- **Storage**: Local state file (JSON) to hold mapping of original_source_id → CalDAV UID and last sync metadata. No central DB required for PoC.
 - **Testing**: `pytest` for unit tests; integration tests will be best-effort due to UI automation flakiness; contract tests for CalDAV API interactions using a test CalDAV server.
 - **Target Platform**: macOS (desktop, logged-in GUI session required for UI automation). Scheduler target: `cron` or `launchd`.
 - **Project Type**: Single project (script/tool) — Option 1 structure.
@@ -204,16 +203,12 @@ ios/ or android/
 
 `data-model.md` (summary):
 - `ParsedEvent`:
-   - `original_source_id` (string) — opaque hash of parsed fields
    - `start_datetime` (ISO8601)
    - `end_datetime` (ISO8601)
    - `title` (string)
    - `location` (string, optional)
    - `description` (string, optional)
    - `confidence_score` (float 0..1)
-- `SyncState`:
-   - `last_sync_at` (ISO8601)
-   - `mappings`: map original_source_id → CalDAV UID, etag
 
 `quickstart.md` (summary):
 - Prereqs: macOS with Outlook installed, Python 3.11, `tesseract` installed, Accessibility permission granted to the tool, configured CalDAV server credentials.

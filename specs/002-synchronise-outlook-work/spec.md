@@ -71,7 +71,7 @@ As a user who has been granted permission, I want my Outlook Calendar events to 
 - **FR-010**: Conflict resolution policy MUST be to favor Outlook (Outlook's version always replaces CalDAV).
 
 ### Key Entities *(include if feature involves data)*
-- **Event (Parsed)**: start_datetime, end_datetime (or duration), title, location, description, original_source_id (opaque hash derived from parsed OCR fields), confidence_score
+- **Event (Parsed)**: start_datetime, end_datetime (or duration), title, location, description, confidence_score
 - **CalDAVEntry**: UID, start, end, summary, location, description, etag/last_modified
 
 ---

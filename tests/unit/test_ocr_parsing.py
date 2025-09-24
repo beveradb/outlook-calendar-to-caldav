@@ -59,7 +59,6 @@ def test_row_cleanup_and_event_parsing_junk_prefix():
             start_dt = f"{current_date_str}T{start_time}:00"
             end_dt = f"{current_date_str}T{end_time}:00"
             parsed_events.append(ParsedEvent(
-                original_source_id=f"{current_date_str}-{start_time}-{title}",
                 start_datetime=start_dt,
                 end_datetime=end_dt,
                 title=title,

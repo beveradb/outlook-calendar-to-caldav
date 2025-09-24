@@ -10,7 +10,6 @@ def test_map_parsed_event_to_ical_basic_event():
     # and the import is commented out.
 
     parsed_event = ParsedEvent(
-        original_source_id="2025-09-23-10:00 AM-Meeting with John",
         start_datetime="2025-09-23T10:00:00",
         end_datetime="2025-09-23T11:00:00",
         title="Meeting with John",
@@ -26,7 +25,7 @@ BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Example Corp//Calendar Sync//EN
 BEGIN:VEVENT
-UID:2025-09-23-10:00 AM-Meeting with John
+UID:
 DTSTAMP:20250923T100000Z
 DTSTART:20250923T100000Z
 DTEND:20250923T110000Z

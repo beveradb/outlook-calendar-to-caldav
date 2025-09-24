@@ -174,29 +174,26 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
         os.makedirs(ics_dir, exist_ok=True)
         all_success = True
         for parsed_event in parsed_events:
-            ical_data = map_parsed_event_to_ical(parsed_event)
+            # Generate ICS data and UID inside map_parsed_event_to_ical
+            ical_data, event_uid = map_parsed_event_to_ical(parsed_event)
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"iCalendar payload to be sent for {parsed_event.title}:\n{ical_data}")
-
-            # Always generate a new UUID for CalDAV UID
-            uid_to_use = uuid.uuid4().hex[:12]
+                logger.debug(f"iCalendar payload to be sent for {parsed_event.title} (UID: {event_uid}):\n{ical_data}")
 
             # Write ICS file to disk before creating event
-            safe_title = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in parsed_event.title)
-            ics_filename = f"{safe_title}_{uid_to_use}.ics"
+            ics_filename = f"{event_uid}.ics"
             ics_path = os.path.join(ics_dir, ics_filename)
             try:
                 with open(ics_path, 'w', encoding='utf-8') as f:
                     f.write(ical_data)
-                logger.info(f"ICS file written: {ics_path}")
+                logger.debug(f"ICS file written: {ics_path}")
             except Exception as e:
                 logger.error(f"Failed to write ICS file {ics_path}: {e}")
 
             if dry_run:
-                logger.info(f"[DRY RUN] Would create CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
+                logger.info(f"[DRY RUN] Would create CalDAV event for Outlook event: {parsed_event.title} (UID: {event_uid})")
             else:
-                logger.info(f"Creating CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
-                put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
+                logger.info(f"Creating CalDAV event for Outlook event: {parsed_event.title} (UID: {event_uid})")
+                put_success = _retry(lambda: caldav_client.put_event(event_uid, ical_data), retries=3, delay=5)
                 if not put_success:
                     logger.error(f"Failed to PUT event '{parsed_event.title}'.")
                     all_success = False

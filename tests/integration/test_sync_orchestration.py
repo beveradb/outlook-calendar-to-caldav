@@ -57,7 +57,6 @@ def test_sync_outlook_to_caldav_integration_success(mocker):
     mocker.patch('src.sync_tool.navigate_to_calendar', return_value=True)
     mocker.patch('src.sync_tool.capture_screenshot', return_value=True)
     mocker.patch('src.sync_tool.process_image_with_ocr', return_value=[ParsedEvent(
-        original_source_id="outlook_event_1",
         start_datetime="2025-09-23T10:00:00",
         end_datetime="2025-09-23T11:00:00",
         title="Test Event",
@@ -66,7 +65,6 @@ def test_sync_outlook_to_caldav_integration_success(mocker):
         confidence_score=0.9
     )])
     mocker.patch('src.sync_tool.parse_outlook_event_from_ocr', return_value=ParsedEvent(
-        original_source_id="outlook_event_1",
         start_datetime="2025-09-23T10:00:00",
         end_datetime="2025-09-23T11:00:00",
         title="Test Event",
@@ -143,7 +141,6 @@ def test_sync_outlook_to_caldav_integration_caldav_put_failure(mocker):
     mocker.patch('src.sync_tool.capture_screenshot', return_value=True)
     mocker.patch('src.sync_tool.process_image_with_ocr', return_value="10:00 AM - 11:00 AM Test Event")
     mocker.patch('src.sync_tool.parse_outlook_event_from_ocr', return_value=ParsedEvent(
-        original_source_id="outlook_event_1",
         start_datetime="2025-09-23T10:00:00",
         end_datetime="2025-09-23T11:00:00",
         title="Test Event",
