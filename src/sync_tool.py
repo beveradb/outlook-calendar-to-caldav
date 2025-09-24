@@ -54,7 +54,7 @@ def resolve_conflict(outlook_event: ParsedEvent, caldav_event_ical: str) -> Pars
     # As per requirements, Outlook always wins in conflict resolution.
     return outlook_event
 
-def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification_func=send_pushbullet_notification) -> bool:
+def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification_func=send_pushbullet_notification, dry_run: bool = False) -> bool:
     """
     Orchestrate the synchronization of Outlook calendar events to CalDAV.
     Args:
@@ -88,25 +88,41 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
         )
         logger.info("CalDAV client initialized.")
 
-        # 3. Fetch and delete all existing CalDAV events
+        # 3. Fetch and (optionally) delete all existing CalDAV events
         logger.info("Fetching existing CalDAV events...")
         existing_caldav_events = _retry(caldav_client.get_events, retries=3, delay=5)
         assert existing_caldav_events is not None # Explicit assertion for linter
         logger.info(f"Fetched {len(existing_caldav_events)} existing CalDAV events.")
 
-        # Delete all events before syncing new ones
-        for uid in existing_caldav_events.keys():
-            logger.info(f"Deleting CalDAV event: {uid}")
-            del_success = _retry(lambda: caldav_client.delete_event(uid), retries=3, delay=5)
-            if del_success:
-                logger.info(f"Event {uid} deleted successfully.")
+        # Delete all events before syncing new ones, unless dry_run
+        import os
+        deleted_ics_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ics_deleted')
+        os.makedirs(deleted_ics_dir, exist_ok=True)
+        for uid, ical_data in existing_caldav_events.items():
+            # Back up ICS before deletion
+            ics_filename = f"deleted_{uid}.ics"
+            ics_path = os.path.join(deleted_ics_dir, ics_filename)
+            try:
+                with open(ics_path, 'w', encoding='utf-8') as f:
+                    f.write(ical_data)
+                logger.info(f"Backed up deleted event to ICS: {ics_path}")
+            except Exception as e:
+                logger.error(f"Failed to back up ICS file {ics_path}: {e}")
+
+            if dry_run:
+                logger.info(f"[DRY RUN] Would delete CalDAV event: {uid}")
             else:
-                logger.error(f"Failed to delete event {uid}.")
-                logger.critical("Aborting sync due to failed event deletion.")
-                send_notification_once(getattr(config, "pushbullet_api_key", None),
-                                      f"Outlook to CalDAV sync failed: Could not delete event {uid}",
-                                      "Calendar Sync")
-                return False
+                logger.info(f"Deleting CalDAV event: {uid}")
+                del_success = _retry(lambda: caldav_client.delete_event(uid), retries=3, delay=5)
+                if del_success:
+                    logger.info(f"Event {uid} deleted successfully.")
+                else:
+                    logger.error(f"Failed to delete event {uid}.")
+                    logger.critical("Aborting sync due to failed event deletion.")
+                    send_notification_once(getattr(config, "pushbullet_api_key", None),
+                                          f"Outlook to CalDAV sync failed: Could not delete event {uid}",
+                                          "Calendar Sync")
+                    return False
 
         # 4. Launch Outlook and navigate to calendar
         logger.info("Launching Outlook and navigating to calendar...")
@@ -153,6 +169,9 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
         logger.info(f"Parsed {len(parsed_events)} event(s) from OCR output.")
 
         # 7. Sync all parsed events
+        import os
+        ics_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ics_create')
+        os.makedirs(ics_dir, exist_ok=True)
         all_success = True
         for parsed_event in parsed_events:
             ical_data = map_parsed_event_to_ical(parsed_event)
@@ -161,13 +180,30 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
 
             # Always generate a new UUID for CalDAV UID
             uid_to_use = uuid.uuid4().hex[:12]
-            logger.info(f"Creating CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
-            put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
 
-            if not put_success:
-                logger.error(f"Failed to PUT event '{parsed_event.title}'.")
-                all_success = False
+            # Write ICS file to disk before creating event
+            safe_title = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in parsed_event.title)
+            ics_filename = f"{safe_title}_{uid_to_use}.ics"
+            ics_path = os.path.join(ics_dir, ics_filename)
+            try:
+                with open(ics_path, 'w', encoding='utf-8') as f:
+                    f.write(ical_data)
+                logger.info(f"ICS file written: {ics_path}")
+            except Exception as e:
+                logger.error(f"Failed to write ICS file {ics_path}: {e}")
+
+            if dry_run:
+                logger.info(f"[DRY RUN] Would create CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
+            else:
+                logger.info(f"Creating CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
+                put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
+                if not put_success:
+                    logger.error(f"Failed to PUT event '{parsed_event.title}'.")
+                    all_success = False
         # Send notification after sync attempt
+        if dry_run:
+            logger.info(f"[DRY RUN] Completed dry run. No events were deleted or created. {len(parsed_events)} events would have been created. ICS files written to {ics_dir}.")
+            return True
         if all_success:
             send_notification_once(getattr(config, "pushbullet_api_key", None),
                                   f"Outlook to CalDAV synced successfully, {len(parsed_events)} events created",

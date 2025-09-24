@@ -22,13 +22,18 @@ def main():
         default=datetime.now().strftime("%Y-%m-%d"),
         help="Date for which to sync events (YYYY-MM-DD, default: today)"
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform a dry run: log actions but do not modify the remote CalDAV server."
+    )
 
     args = parser.parse_args()
 
     logger = setup_logging()
     logger.info("Starting Outlook to CalDAV synchronization.")
 
-    success = sync_outlook_to_caldav(args.config, args.date)
+    success = sync_outlook_to_caldav(args.config, args.date, dry_run=args.dry_run)
 
     if success:
         logger.info("Synchronization completed successfully.")

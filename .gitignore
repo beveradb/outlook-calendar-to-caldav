@@ -1,7 +1,8 @@
 # Functional outputs
 *.png
 config.json
-
+ics_create
+ics_deleted
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
