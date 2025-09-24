@@ -71,7 +71,6 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
        "outlook_calendar_name": "Calendar",
        "sync_interval_minutes": 15,
        "log_level": "INFO",
-   // removed: "sync_state_filepath"
        "verify_ssl": false,
        "pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"
     }
@@ -80,7 +79,6 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
    - `caldav_url`: Your CalDAV server's calendar URL (ending with `/`)
    - `caldav_username`/`caldav_password`: CalDAV credentials
    - `outlook_calendar_name`: Name of the Outlook calendar to sync
-   // removed: sync_state_filepath
    - `pushbullet_api_key`: (Optional) Your Pushbullet API key. If set, notifications will be sent to your Pushbullet account on successful sync or error.
 
 ### Pushbullet Notifications
@@ -110,8 +108,6 @@ This tool supports sending push notifications to your devices using Pushbullet. 
 **Troubleshooting:**
 - If you do not receive notifications, check your API key and device setup in Pushbullet.
 - Errors in notification delivery are logged in `logs/calendar_sync.log`.
-
-// removed: sync state file references
 
 ---
 

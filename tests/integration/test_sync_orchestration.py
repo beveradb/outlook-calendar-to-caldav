@@ -11,7 +11,6 @@ from src.sync_tool import sync_outlook_to_caldav
 from src.config import Config
 from src.ocr_processor import ParsedEvent
 from src.caldav_client import CalDAVClient
- # SyncState removed
 
 # Define temporary file paths for testing
 TEST_CONFIG_FILE = "test_sync_config.json"
