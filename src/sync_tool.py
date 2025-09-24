@@ -207,7 +207,7 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
                                   "Calendar Sync")
         else:
             send_notification_once(getattr(config, "pushbullet_api_key", None),
-                                  "Outlook to CalDAV sync completed with errors.",
+                                  "Outlook to CalDAV sync failed: One or more events could not be created.",
                                   "Calendar Sync")
         return all_success
 

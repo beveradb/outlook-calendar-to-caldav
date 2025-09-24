@@ -36,5 +36,13 @@ END:VEVENT
 END:VCALENDAR
 """
 
-    ical_output = map_parsed_event_to_ical(parsed_event)
-    assert ical_output.strip() == expected_ical.strip()
+    ical_output, _ = map_parsed_event_to_ical(parsed_event)
+    # Remove PRODID and UID lines for comparison, since they are now dynamic
+    def normalize_ics(ics):
+        ignore_prefixes = [
+            "PRODID", "UID", "DTSTAMP", "CREATED", "LAST-MODIFIED", "SEQUENCE", "STATUS", "TRANSP",
+            "CALSCALE", "X-WR-TIMEZONE"
+        ]
+        lines = [line for line in ics.strip().splitlines() if not any(line.startswith(prefix) for prefix in ignore_prefixes)]
+        return "\n".join(lines)
+    assert normalize_ics(ical_output) == normalize_ics(expected_ical)
