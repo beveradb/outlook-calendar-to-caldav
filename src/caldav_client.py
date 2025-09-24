@@ -105,19 +105,51 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
     dtend = to_dt(event.end_datetime, timezone)
 
     event_uid = uuid.uuid4().hex[:12]
+    from datetime import datetime
+    now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     ical_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Example Corp//Calendar Sync//EN",
+        "CALSCALE:GREGORIAN",
+        "PRODID:-//calendar-sync//EN",
+        f"X-WR-TIMEZONE:{timezone}",
+    ]
+    # Add concise VTIMEZONE for America/New_York
+    if timezone == "America/New_York":
+        ical_lines.extend([
+            "BEGIN:VTIMEZONE",
+            "TZID:America/New_York",
+            "BEGIN:STANDARD",
+            "DTSTART:19701101T020000",
+            "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+            "TZNAME:EST",
+            "TZOFFSETFROM:-0400",
+            "TZOFFSETTO:-0500",
+            "END:STANDARD",
+            "BEGIN:DAYLIGHT",
+            "DTSTART:19700308T020000",
+            "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
+            "TZNAME:EDT",
+            "TZOFFSETFROM:-0500",
+            "TZOFFSETTO:-0400",
+            "END:DAYLIGHT",
+            "X-LIC-LOCATION:America/New_York",
+            "END:VTIMEZONE"
+        ])
+    ical_lines.extend([
         "BEGIN:VEVENT",
         f"UID:{event_uid}",
-    ]
+        f"DTSTAMP:{now_utc}",
+        f"CREATED:{now_utc}",
+        f"LAST-MODIFIED:{now_utc}",
+        "SEQUENCE:0",
+        "STATUS:CONFIRMED",
+        "TRANSP:OPAQUE",
+    ])
     if timezone == "UTC":
-        ical_lines.append(f"DTSTAMP:{dtstamp}")
         ical_lines.append(f"DTSTART:{dtstart}")
         ical_lines.append(f"DTEND:{dtend}")
     else:
-        ical_lines.append(f"DTSTAMP;TZID=America/New_York:{dtstamp}")
         ical_lines.append(f"DTSTART;TZID=America/New_York:{dtstart}")
         ical_lines.append(f"DTEND;TZID=America/New_York:{dtend}")
     ical_lines.append(f"SUMMARY:{event.title}")
