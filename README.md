@@ -71,7 +71,7 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
        "outlook_calendar_name": "Calendar",
        "sync_interval_minutes": 15,
        "log_level": "INFO",
-       "sync_state_filepath": "sync_state.json",
+   // removed: "sync_state_filepath"
        "verify_ssl": false,
        "pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"
     }
@@ -80,23 +80,38 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
    - `caldav_url`: Your CalDAV server's calendar URL (ending with `/`)
    - `caldav_username`/`caldav_password`: CalDAV credentials
    - `outlook_calendar_name`: Name of the Outlook calendar to sync
-   - `sync_state_filepath`: Path to the sync state file (tracks idempotency)
+   // removed: sync_state_filepath
    - `pushbullet_api_key`: (Optional) Your Pushbullet API key. If set, notifications will be sent to your Pushbullet account on successful sync or error.
+
 ### Pushbullet Notifications
 
-If you want to receive push notifications on your devices when a sync completes or fails:
+This tool supports sending push notifications to your devices using Pushbullet. Notifications are sent for both successful syncs and errors, helping you monitor calendar sync status without manually checking logs.
 
-1. Get your Pushbullet API key from https://www.pushbullet.com/#settings
-2. Add it to your `config.json` as `"pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"`
-3. On successful sync, you'll receive a notification like:
+**How Pushbullet Notifications Work:**
+- If you provide a Pushbullet API key in your `config.json`, the tool will send notifications to your Pushbullet account.
+- On successful sync, you receive a notification like:
    - "Outlook to CalDAV synced successfully, X events created"
-4. On error, you'll receive a notification with the error message.
-5. If the API key is not set, no notifications will be sent.
+- On error, you receive a notification with the error message (e.g., network issues, authentication failures, or sync errors).
+- If no API key is set, notifications are disabled and you will only see log output.
 
-**Security Note:** Your API key is sensitive. Do not share or commit it to public repositories.
+**Setup Instructions:**
+1. Sign up for Pushbullet and get your API key from https://www.pushbullet.com/#settings
+2. Add your API key to `config.json` as `"pushbullet_api_key": "YOUR_PUSHBULLET_API_KEY"`
+3. Run the sync tool as usual. Notifications will be sent to all devices linked to your Pushbullet account.
 
-2. **(Optional) Prepare sync state file:**
-   - The tool will create/update this file automatically (default: `sync_state.json`)
+**Security Note:**
+- Your Pushbullet API key is sensitive. Never share or commit it to public repositories.
+- The tool only sends notifications; it does not access or read your Pushbullet messages.
+
+**Notification Details:**
+- Success: "Outlook to CalDAV synced successfully, X events created"
+- Error: "Outlook to CalDAV sync failed: <error details>"
+
+**Troubleshooting:**
+- If you do not receive notifications, check your API key and device setup in Pushbullet.
+- Errors in notification delivery are logged in `logs/calendar_sync.log`.
+
+// removed: sync state file references
 
 ---
 

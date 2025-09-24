@@ -3,13 +3,14 @@ from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
-from src.models.calendar_data import SyncState, ParsedEvent # Import ParsedEvent here
+from src.models.calendar_data import ParsedEvent
 from src.utils.logger import setup_logging, log_pushbullet_attempt
 from src.lib.pushbullet_notify import send_pushbullet_notification
 import time
 from typing import Callable, TypeVar
 import logging
 import urllib3
+import uuid
 
 logger = setup_logging()
 urllib3.disable_warnings()
@@ -77,16 +78,15 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
         logger.setLevel(config.log_level.upper())
         logger.info("Configuration loaded successfully.")
 
-        # 2. Initialize CalDAV client and SyncState
-        logger.info("Initializing CalDAV client and SyncState...")
+        # 2. Initialize CalDAV client
+        logger.info("Initializing CalDAV client...")
         caldav_client = CalDAVClient(
             config.caldav_url,
             config.caldav_username,
             config.caldav_password,
             getattr(config, "verify_ssl", True)
         )
-        sync_state = SyncState(config.sync_state_filepath)
-        logger.info("CalDAV client and SyncState initialized.")
+        logger.info("CalDAV client initialized.")
 
         # 3. Fetch and delete all existing CalDAV events
         logger.info("Fetching existing CalDAV events...")
@@ -159,22 +159,14 @@ def sync_outlook_to_caldav(config_filepath: str, current_date: str, notification
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"iCalendar payload to be sent for {parsed_event.title}:\n{ical_data}")
 
-            caldav_uid = sync_state.get_caldav_id(parsed_event.original_source_id)
-
-            # Ensure caldav_uid is always a string
-            uid_to_use = caldav_uid if isinstance(caldav_uid, str) and caldav_uid else parsed_event.original_source_id
-            if not caldav_uid:
-                logger.info(f"Creating new CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
-                caldav_uid = uid_to_use # For new events, UID is the outlook_id
+            # Always generate a new UUID for CalDAV UID
+            uid_to_use = uuid.uuid4().hex[:12]
+            logger.info(f"Creating CalDAV event for Outlook event: {parsed_event.title} (UID: {uid_to_use})")
             put_success = _retry(lambda: caldav_client.put_event(uid_to_use, ical_data), retries=3, delay=5)
 
-            if put_success:
-                logger.info(f"Event '{parsed_event.title}' synced successfully. CalDAV UID: {caldav_uid}")
-                sync_state.record_sync(parsed_event.original_source_id, caldav_uid)
-            else:
-                logger.error(f"Failed to sync event '{parsed_event.title}'.")
+            if not put_success:
+                logger.error(f"Failed to PUT event '{parsed_event.title}'.")
                 all_success = False
-        logger.info("Sync state recorded.")
         # Send notification after sync attempt
         if all_success:
             send_notification_once(getattr(config, "pushbullet_api_key", None),

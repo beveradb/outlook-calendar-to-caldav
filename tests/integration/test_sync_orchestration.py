@@ -11,11 +11,10 @@ from src.sync_tool import sync_outlook_to_caldav
 from src.config import Config
 from src.ocr_processor import ParsedEvent
 from src.caldav_client import CalDAVClient
-from src.models.calendar_data import SyncState
+ # SyncState removed
 
 # Define temporary file paths for testing
 TEST_CONFIG_FILE = "test_sync_config.json"
-TEST_SYNC_STATE_FILE = "test_sync_state.json"
 TEST_SCREENSHOT_FILE = "test_outlook_calendar_screenshot.png"
 
 MOCK_CALDAV_URL = "http://localhost:8000/calendars/user/calendar/"
@@ -23,11 +22,11 @@ MOCK_CALDAV_URL = "http://localhost:8000/calendars/user/calendar/"
 @pytest.fixture(autouse=True)
 def cleanup_test_files():
     # Ensure test files are removed before and after each test
-    for f in [TEST_CONFIG_FILE, TEST_SYNC_STATE_FILE, TEST_SCREENSHOT_FILE]:
+    for f in [TEST_CONFIG_FILE, TEST_SCREENSHOT_FILE]:
         if os.path.exists(f):
             os.remove(f)
     yield
-    for f in [TEST_CONFIG_FILE, TEST_SYNC_STATE_FILE, TEST_SCREENSHOT_FILE]:
+    for f in [TEST_CONFIG_FILE, TEST_SCREENSHOT_FILE]:
         if os.path.exists(f):
             os.remove(f)
 
@@ -36,8 +35,7 @@ def create_test_config(caldav_url, username, password, calendar_name):
         "caldav_url": caldav_url,
         "caldav_username": username,
         "caldav_password": password,
-        "outlook_calendar_name": calendar_name,
-        "sync_state_filepath": "specs/002-synchronise-outlook-work/sync_state.json"
+        "outlook_calendar_name": calendar_name
     }
     with open(TEST_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f)
@@ -78,17 +76,6 @@ def test_sync_outlook_to_caldav_integration_success(mocker):
         confidence_score=0.9
     ))
 
-    # Mock SyncState class directly
-    mock_synced_events = {}
-    mock_sync_state_instance = mocker.MagicMock(spec=SyncState)
-    mock_sync_state_instance.get_caldav_id.return_value = None # Simulate no existing event
-    mock_sync_state_instance._synced_events = mock_synced_events # Ensure the mock instance uses our controlled dict
-
-    def record_sync_side_effect(outlook_id, caldav_id):
-        mock_synced_events[outlook_id] = caldav_id
-
-    mock_sync_state_instance.record_sync.side_effect = record_sync_side_effect
-    mocker.patch('src.sync_tool.SyncState', return_value=mock_sync_state_instance)
 
     # Mock CalDAV client interactions
     with requests_mock.Mocker() as m:
@@ -115,8 +102,6 @@ END:VCALENDAR
     mocker.patch('src.caldav_client.CalDAVClient.put_event', return_value=mock_response)
     result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
     assert result is True
-    mock_sync_state_instance.record_sync.assert_called_once_with("outlook_event_1", "outlook_event_1")
-    assert mock_sync_state_instance._synced_events["outlook_event_1"] == "outlook_event_1"
 
 def test_sync_outlook_to_caldav_integration_no_event(mocker):
     mocker.patch('src.sync_tool.launch_outlook', return_value=True)
@@ -145,7 +130,6 @@ END:VCALENDAR
     mocker.patch('src.caldav_client.CalDAVClient.get_events', return_value={})
     result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
     assert result is True
-    assert not os.path.exists(TEST_SYNC_STATE_FILE) # No event, so no sync state recorded
 
 def test_sync_outlook_to_caldav_integration_outlook_launch_failure(mocker):
     mocker.patch('src.sync_tool.launch_outlook', return_value=False)
@@ -184,4 +168,3 @@ END:VCALENDAR
         result = sync_outlook_to_caldav(TEST_CONFIG_FILE, "2025-09-23")
 
         assert result is False
-        assert not os.path.exists(TEST_SYNC_STATE_FILE) # Should not record state on failure
