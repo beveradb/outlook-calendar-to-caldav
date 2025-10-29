@@ -4,7 +4,6 @@ from typing import Optional
 
 
 @dataclass
-
 class Config:
     """
     Configuration for the sync tool, loaded from a JSON file.
@@ -18,6 +17,8 @@ class Config:
     sync_state_filepath: str = "specs/002-synchronise-outlook-work/sync_state.json"
     verify_ssl: bool = True
     pushbullet_api_key: Optional[str] = None
+    use_gemini_vision: bool = False
+    gemini_api_key: Optional[str] = None
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':
@@ -44,6 +45,12 @@ class Config:
             # Default pushbullet_api_key to None if not present
             if "pushbullet_api_key" not in config_data:
                 config_data["pushbullet_api_key"] = None
+            # Default use_gemini_vision to False if not present
+            if "use_gemini_vision" not in config_data:
+                config_data["use_gemini_vision"] = False
+            # Default gemini_api_key to None if not present
+            if "gemini_api_key" not in config_data:
+                config_data["gemini_api_key"] = None
             return cls(**config_data)
         except FileNotFoundError:
             raise FileNotFoundError(f"Config file not found at {filepath}")

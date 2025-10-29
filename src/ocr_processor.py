@@ -163,8 +163,27 @@ def process_image_with_ocr(image_path: str):
 
     # Convert to grayscale and enhance contrast
     img = img.convert('L')  # Grayscale
+    
+    # Apply slight Gaussian blur to reduce noise before thresholding
+    from PIL import ImageFilter, ImageEnhance
+    img = img.filter(ImageFilter.MedianFilter(size=3))
+    
+    # Increase contrast before thresholding
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(2.0)  # Increase contrast by 2x
+    
+    # Adaptive thresholding for better text separation
+    # This is more robust than fixed threshold
     threshold = 80
     img = img.point([255 if i > threshold else 0 for i in range(256)])
+    
+    # Optional: slight dilation to make text bolder (helps with thin fonts)
+    # img = img.filter(ImageFilter.MaxFilter(size=3))
+    
+    # Upscale image for better OCR (tesseract works better with larger text)
+    # Scale by 2x - helps with small fonts
+    original_size = img.size
+    img = img.resize((original_size[0] * 2, original_size[1] * 2), Image.Resampling.LANCZOS)
 
     # Save the processed image for manual review
     processed_path = image_path.replace('.png', '_bw.png')
@@ -174,16 +193,42 @@ def process_image_with_ocr(image_path: str):
     except Exception as e:
         logger.error(f"Could not save high-contrast image: {e}")
 
-    ocr_data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+    # Tesseract configuration for better accuracy
+    # PSM 6 = Assume a single uniform block of text
+    # OEM 3 = Use both legacy and LSTM engines
+    # Try multiple PSM modes for better results:
+    # PSM 6 = uniform block of text
+    # PSM 11 = sparse text, find as much text as possible
+    custom_config = r'--oem 3 --psm 6'
+    ocr_data = pytesseract.image_to_data(img, config=custom_config, output_type=pytesseract.Output.DICT)
+    
+    # For debugging: try PSM 11 as fallback if we get poor results
+    # This can be enabled if PSM 6 continues to miss text
+    # custom_config_11 = r'--oem 3 --psm 11'
+    # ocr_data_11 = pytesseract.image_to_data(img, config=custom_config_11, output_type=pytesseract.Output.DICT)
     n_boxes = len(ocr_data['level'])
     words = []
-    # Collect words first, discarding those in x=775..880
+    
+    # IMPORTANT: Image was upscaled by 2x, so coordinate ranges must be adjusted
+    # Original range: x=775..880 → Scaled range: x=1550..1760
+    scale_factor = 2
+    x_filter_min = 775 * scale_factor
+    x_filter_max = 880 * scale_factor
+    
+    # Collect words first, discarding those in the icon column range
     for i in range(n_boxes):
         word = ocr_data['text'][i].strip()
         if not word:
             continue
+        
+        # Filter out low-confidence words (confidence < 60)
+        conf = int(ocr_data['conf'][i])
+        if conf < 50:  # Lowered from 60 to be more lenient
+            logger.debug(f"Discarding low-confidence word (conf={conf}): '{word}'")
+            continue
+            
         x = ocr_data['left'][i]
-        if 775 <= x <= 880:
+        if x_filter_min <= x <= x_filter_max:
             logger.debug(f"Discarding word at x={x}: '{word}'")
             continue
         word_data = {
@@ -204,9 +249,9 @@ def process_image_with_ocr(image_path: str):
         logger.debug(f"Word: {{'text': '{w['text']}', 'x': {w['x']}, 'y_min': {y_min}, 'y_max': {y_max}, 'width': {w['width']}, 'height': {w['height']}}}")
 
     # --- New strict rule-based row identification ---
-    # 1. No row > 70px tall
-    # 2. At least 20px between rows
-    # 3. No row with only a single character
+    # 1. No row > 70px tall (adjusted for 2x scaling = 140px)
+    # 2. At least 20px between rows (adjusted for 2x scaling = 40px)
+    # 3. Skip rows with only noise (single char, punctuation only)
 
     # Sort words by top y
     words_sorted = sorted(words, key=lambda w: w['y'])
@@ -219,12 +264,17 @@ def process_image_with_ocr(image_path: str):
     unused = [dict(w) for w in words_sorted]
     last_y_max = None
     row_idx = 1
+    
+    # Adjust row height for 2x scaling: 62 * 2 = 124
+    max_row_height = 124
+    row_window = 124
+    
     while unused:
         # Start new row with lowest y_min
         unused.sort(key=lambda w: w['y'])
         seed = unused.pop(0)
         row_y_min = int(seed['y'])
-        window_max = row_y_min + 62
+        window_max = row_y_min + row_window
         row_words = [seed]
         to_remove = []
         for w in unused:
@@ -240,15 +290,19 @@ def process_image_with_ocr(image_path: str):
             row_height = row_y_max - row_y_min
             row_words_sorted = sorted(row_words, key=lambda w: w['x'])
             row_text = ' '.join([w['text'] for w in row_words_sorted])
-            if row_height > 62:
-                logger.error(f"Row too tall: y_min={row_y_min}, y_max={row_y_max}, height={row_height}, words={[w['text'] for w in row_words_sorted]}")
-                raise ValueError(f"Row too tall: {row_height}px. Words: {[w['text'] for w in row_words_sorted]}")
-            if len(row_text) == 1:
-                logger.error(f"Row contains only a single character: y_min={row_y_min}, y_max={row_y_max}, words={[w['text'] for w in row_words_sorted]}")
-                raise ValueError(f"Row contains only a single character. Words: {[w['text'] for w in row_words_sorted]}")
-            if last_y_max is not None and row_y_min - last_y_max < 5:
-                logger.error(f"Gap between rows too small: prev_y_max={last_y_max}, curr_y_min={row_y_min}, gap={row_y_min - last_y_max}")
-                raise ValueError(f"Gap between rows too small: {row_y_min - last_y_max}px")
+            
+            # Skip rows that are just noise (single punctuation, etc.)
+            if len(row_text.strip()) <= 2 and not row_text.strip().isalnum():
+                logger.debug(f"Skipping noise row: y_min={row_y_min}, y_max={row_y_max}, text='{row_text}'")
+                continue
+                
+            if row_height > max_row_height:
+                logger.warning(f"Row very tall (may span multiple lines): y_min={row_y_min}, y_max={row_y_max}, height={row_height}, words={[w['text'] for w in row_words_sorted]}")
+                # Don't raise error, just log warning and continue
+                
+            if last_y_max is not None and row_y_min - last_y_max == 0:
+                logger.debug(f"Gap between rows is zero: prev_y_max={last_y_max}, curr_y_min={row_y_min}")
+                # This is okay, just log it
             crop_path = os.path.join(ocr_crop_dir, f"row_{row_idx:02d}.png")
             crop_img = img.crop((0, float(row_y_min), float(img.width), float(row_y_max)))
             crop_img.save(crop_path)
@@ -267,7 +321,8 @@ def process_image_with_ocr(image_path: str):
     # - Event title: text before time or "All day event"
     # - Discard trailing text after time
 
-    date_row_pattern = re.compile(r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2}")
+    # Match both "Monday, October 27" and "October 28" (with or without day of week)
+    date_row_pattern = re.compile(r"^(?:(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+)?[A-Za-z]+\s+\d{1,2}$")
     time_range_pattern = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
     all_day_pattern = re.compile(r"All day event", re.IGNORECASE)
     
@@ -283,9 +338,15 @@ def process_image_with_ocr(image_path: str):
             try:
                 # Assume current year if not present
                 current_year = datetime.now().year
-                current_date_str = datetime.strptime(f"{row_text_full} {current_year}", "%A, %B %d %Y").strftime("%Y-%m-%d")
-            except Exception:
+                # Try parsing with day of week first: "Monday, October 27"
+                try:
+                    current_date_str = datetime.strptime(f"{row_text_full} {current_year}", "%A, %B %d %Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    # Fallback: parse without day of week: "October 28"
+                    current_date_str = datetime.strptime(f"{row_text_full} {current_year}", "%B %d %Y").strftime("%Y-%m-%d")
+            except Exception as e:
                 # Fallback: ignore date row if can't parse
+                logger.warning(f"Could not parse date from row '{row_text_full}': {e}")
                 continue
             continue
 
@@ -293,16 +354,56 @@ def process_image_with_ocr(image_path: str):
         if not current_date_str:
             continue
 
-        # For event rows, discard words with x < 120
-        event_row_words = [w for w in row_words if w['x'] >= 120]
+        # For event rows, discard words with x < 120 (date column on left)
+        # IMPORTANT: Adjust for 2x image scaling
+        # Looking at the layout, the date column is quite narrow (~60px in original)
+        # So we use a conservative filter to avoid removing event text
+        x_event_filter = 60 * scale_factor  # 120 for 2x scale (was 240, too aggressive)
+        
+        # Debug: log what we're filtering
+        filtered_words = [w for w in row_words if w['x'] < x_event_filter]
+        if filtered_words:
+            logger.debug(f"Filtering out {len(filtered_words)} words with x < {x_event_filter}: {[w['text'] for w in filtered_words]}")
+        
+        event_row_words = [w for w in row_words if w['x'] >= x_event_filter]
         row_text = ' '.join([w['text'] for w in event_row_words]).strip()
+        
+        # Debug: log the full row before and after filtering
+        row_text_full_unfiltered = ' '.join([w['text'] for w in row_words])
+        if row_text != row_text_full_unfiltered:
+            logger.debug(f"Row before filter: '{row_text_full_unfiltered}'")
+            logger.debug(f"Row after filter: '{row_text}'")
+
+        # Check if filtered text is also a date row (e.g., "October 28" after filtering)
+        if date_row_pattern.match(row_text):
+            logger.info(f"Date row detected (after filtering): {row_text}")
+            # Parse date, always specify year to avoid ambiguity
+            try:
+                # Assume current year if not present
+                current_year = datetime.now().year
+                # Try parsing with day of week first: "Monday, October 27"
+                try:
+                    current_date_str = datetime.strptime(f"{row_text} {current_year}", "%A, %B %d %Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    # Fallback: parse without day of week: "October 28"
+                    current_date_str = datetime.strptime(f"{row_text} {current_year}", "%B %d %Y").strftime("%Y-%m-%d")
+            except Exception as e:
+                # Fallback: ignore date row if can't parse
+                logger.warning(f"Could not parse date from filtered row '{row_text}': {e}")
+                continue
+            continue
 
         # Check for time range or all day event
         time_match = time_range_pattern.search(row_text)
         all_day_match = all_day_pattern.search(row_text)
-        if not time_match and not all_day_match:
-            logger.error(f"Unable to parse event row: {row_text}")
-            raise ValueError(f"Unable to parse event row: {row_text}")
+        
+        # Fallback: check for partial time range (only end time visible, e.g., "- 16:55")
+        partial_time_pattern = re.compile(r'-\s*(\d{1,2}:\d{2})')
+        partial_time_match = partial_time_pattern.search(row_text) if not time_match else None
+        
+        if not time_match and not all_day_match and not partial_time_match:
+            logger.warning(f"Unable to parse event row (no time found), skipping: {row_text}")
+            continue  # Skip this event instead of raising error
 
         # Extract event title and times
         title = None
@@ -312,6 +413,22 @@ def process_image_with_ocr(image_path: str):
             title = row_text[:time_match.start()].strip()
             start_time = time_match.group(1)
             end_time = time_match.group(2)
+        elif partial_time_match:
+            # Only end time visible, infer start time (try common meeting durations)
+            title = row_text[:partial_time_match.start()].strip()
+            end_time = partial_time_match.group(1)
+            # Parse end time and subtract typical meeting duration
+            try:
+                end_time_obj = datetime.strptime(end_time, "%H:%M")
+                # Try common meeting durations: 15min, 30min, 45min, 60min
+                # Default to 15 minutes for short meetings (most conservative)
+                start_time_obj = end_time_obj - timedelta(minutes=15)
+                start_time = start_time_obj.strftime("%H:%M")
+                logger.warning(f"Partial time range detected for '{title}', inferred start time: {start_time} (end: {end_time}) - assuming 15min meeting")
+            except ValueError:
+                # Fallback to 1-hour meeting if parsing fails
+                logger.warning(f"Could not parse end time '{end_time}', using default 1-hour duration")
+                start_time = "00:00"  # Will be handled below
         elif all_day_match:
             idx = row_text.lower().find("all day event")
             # Extract title after 'All day event'

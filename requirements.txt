@@ -1,0 +1,6 @@
+pillow
+pyobjc
+pytesseract
+caldav
+pytz
+google-generativeai

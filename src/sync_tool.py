@@ -1,6 +1,7 @@
 from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
+from src.gemini_extractor import extract_events_with_gemini, extract_events_with_gemini_fallback
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
 from src.models.calendar_data import ParsedEvent
 from src.utils.logger import setup_logging, log_pushbullet_attempt
@@ -96,7 +97,7 @@ def sync_outlook_to_caldav(
         logger.info("CalDAV client initialized.")
 
         # 4. Launch Outlook and navigate to calendar
-        logger.info("Launching Outlook and navigating to calendar...")
+        logger.info("Launching Outlook...")
         if not _retry(launch_outlook, retries=3, delay=5):
             logger.error("Failed to launch Outlook after multiple retries.")
             send_notification_once(
@@ -105,15 +106,18 @@ def sync_outlook_to_caldav(
                 "Calendar Sync",
             )
             return False
-        if not _retry(navigate_to_calendar, retries=3, delay=5):
-            logger.error("Failed to navigate to Outlook calendar after multiple retries.")
-            send_notification_once(
-                getattr(config, "pushbullet_api_key", None),
-                "Outlook to CalDAV sync failed: Could not navigate to calendar",
-                "Calendar Sync",
-            )
-            return False
-        logger.info("Outlook launched and navigated to calendar.")
+        # TEMPORARILY DISABLED: Navigation to calendar (requires accessibility permissions)
+        # User should manually ensure Outlook is in calendar view (Work Week + List view) before running
+        # if not _retry(navigate_to_calendar, retries=3, delay=5):
+        #     logger.error("Failed to navigate to Outlook calendar after multiple retries.")
+        #     send_notification_once(
+        #         getattr(config, "pushbullet_api_key", None),
+        #         "Outlook to CalDAV sync failed: Could not navigate to calendar",
+        #         "Calendar Sync",
+        #     )
+        #     return False
+        logger.info("Outlook launched. Please ensure Outlook is in Calendar view (Work Week + List view).")
+        time.sleep(3)  # Give user a moment to manually switch to calendar view if needed
 
         # 5. Capture screenshot
         screenshot_path = "outlook_calendar_screenshot.png"
@@ -129,9 +133,22 @@ def sync_outlook_to_caldav(
             return False
         logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
 
-        # 6. Process cropped screenshot with OCR to get parsed events
-        logger.info("Processing cropped screenshot with OCR...")
-        parsed_events = process_image_with_ocr(cropped_path)
+        # 6. Process cropped screenshot with OCR or Gemini to get parsed events
+        use_gemini = getattr(config, "use_gemini_vision", False)
+        gemini_api_key = getattr(config, "gemini_api_key", None)
+        
+        if use_gemini and gemini_api_key:
+            logger.info("Processing cropped screenshot with Gemini Vision API...")
+            try:
+                parsed_events = extract_events_with_gemini(cropped_path, gemini_api_key)
+            except Exception as e:
+                logger.warning(f"Gemini extraction failed, falling back to OCR: {e}")
+                logger.info("Processing cropped screenshot with OCR...")
+                parsed_events = process_image_with_ocr(cropped_path)
+        else:
+            logger.info("Processing cropped screenshot with OCR...")
+            parsed_events = process_image_with_ocr(cropped_path)
+            
         # Log each event for manual validation
         logger.debug("Parsed events from OCR:")
         for idx, event in enumerate(parsed_events, 1):
