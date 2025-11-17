@@ -45,7 +45,12 @@ def extract_events_with_gemini(image_path: str, api_key: str) -> List[ParsedEven
         raise
     
     # Craft a detailed prompt for event extraction
-    prompt = """You are analyzing a screenshot of Microsoft Outlook calendar in Work Week view with List layout.
+    # Get current year to help Gemini infer the correct year
+    current_year = datetime.now().year
+    
+    prompt = f"""You are analyzing a screenshot of Microsoft Outlook calendar in Work Week view with List layout.
+
+IMPORTANT: Today's date is {datetime.now().strftime('%B %d, %Y')}. The current year is {current_year}.
 
 Please extract ALL calendar events visible in this screenshot and return them as a JSON array.
 
@@ -53,7 +58,7 @@ For each event, extract:
 - title: The event title/subject
 - start_time: Start time in HH:MM format (24-hour)
 - end_time: End time in HH:MM format (24-hour) 
-- date: Date in YYYY-MM-DD format
+- date: Date in YYYY-MM-DD format (YEAR MUST BE {current_year})
 - location: Location if visible (optional)
 - description: Any additional details visible (optional)
 
@@ -65,17 +70,18 @@ Important notes:
 - Be very careful to match events with their correct dates
 - If you see multiple events on the same day, include all of them
 - If a time range is partially visible or unclear, make your best estimate
+- CRITICAL: All dates must use the year {current_year}, not any other year
 
 Return ONLY a valid JSON array with no additional text. Format:
 [
-  {
+  {{
     "title": "Event Title",
     "start_time": "HH:MM",
     "end_time": "HH:MM",
     "date": "YYYY-MM-DD",
     "location": "optional location",
     "description": "optional description"
-  }
+  }}
 ]
 
 Extract all events you can see."""

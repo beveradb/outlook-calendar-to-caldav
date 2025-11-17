@@ -164,18 +164,86 @@ def sync_outlook_to_caldav(
             return True  # No event to sync, consider it a success
         logger.info(f"Parsed {len(parsed_events)} event(s) from OCR output.")
 
-        # 3. Fetch and (optionally) delete all existing CalDAV events
+        # 3. Fetch and delete only future existing CalDAV events
         logger.info("Fetching existing CalDAV events...")
         existing_caldav_events = _retry(caldav_client.get_events, retries=3, delay=5)
         assert existing_caldav_events is not None  # Explicit assertion for linter
         logger.info(f"Fetched {len(existing_caldav_events)} existing CalDAV events.")
 
-        # Delete all events before syncing new ones, unless dry_run
+        # Delete only future events before syncing new ones, unless dry_run
         deleted_ics_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "ics_deleted"
         )
         os.makedirs(deleted_ics_dir, exist_ok=True)
+        
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        
         for uid, event_obj in existing_caldav_events.items():
+            # Extract event end time to determine if it's a future event
+            try:
+                # Get the VEVENT component from the event
+                if hasattr(event_obj, 'icalendar_component'):
+                    vevent = event_obj.icalendar_component
+                elif hasattr(event_obj, 'instance') and hasattr(event_obj.instance, 'vevent'):
+                    vevent = event_obj.instance.vevent
+                else:
+                    # Parse the ICS data to get the event end time
+                    from icalendar import Calendar
+                    if hasattr(event_obj, "data"):
+                        ics_data = event_obj.data
+                    elif hasattr(event_obj, "icalendar"):
+                        ics_data = event_obj.icalendar()
+                    else:
+                        ics_data = str(event_obj)
+                    cal = Calendar.from_ical(ics_data)
+                    vevent = None
+                    for component in cal.walk():
+                        if component.name == "VEVENT":
+                            vevent = component
+                            break
+                
+                if vevent is None:
+                    logger.warning(f"Could not parse VEVENT for {uid}, skipping deletion check.")
+                    continue
+                
+                # Get DTEND or calculate from DTSTART + DURATION
+                dtend = vevent.get('dtend')
+                if dtend:
+                    event_end = dtend.dt
+                else:
+                    dtstart = vevent.get('dtstart')
+                    duration = vevent.get('duration')
+                    if dtstart and duration:
+                        event_end = dtstart.dt + duration.dt
+                    elif dtstart:
+                        # All-day event or event with no end time
+                        event_end = dtstart.dt
+                    else:
+                        logger.warning(f"Could not determine end time for {uid}, skipping deletion check.")
+                        continue
+                
+                # Ensure event_end is timezone-aware for comparison
+                if hasattr(event_end, 'tzinfo'):
+                    if event_end.tzinfo is None:
+                        # Assume local timezone if naive
+                        from datetime import datetime as dt
+                        event_end = event_end.replace(tzinfo=timezone.utc)
+                    # Convert to UTC for comparison
+                    event_end_utc = event_end.astimezone(timezone.utc) if hasattr(event_end, 'astimezone') else event_end
+                else:
+                    # It's a date object, consider it as end of day UTC
+                    from datetime import datetime as dt
+                    event_end_utc = dt.combine(event_end, dt.max.time()).replace(tzinfo=timezone.utc)
+                
+                # Skip deletion if event has already ended
+                if event_end_utc < now:
+                    logger.info(f"Skipping past event {uid} (ended: {event_end_utc})")
+                    continue
+                    
+            except Exception as e:
+                logger.warning(f"Error checking event end time for {uid}: {e}. Will delete to be safe.")
+            
             # Ensure uid is a string for filename extraction
             uid_str = str(uid)
             if "/" in uid_str:
