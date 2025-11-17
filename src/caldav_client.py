@@ -1,11 +1,12 @@
 
 
 from src.ocr_processor import ParsedEvent
+from src.interfaces.calendar_repository import ICalendarRepository
 import caldav
 from caldav import DAVClient
 
 
-class CalDAVClient:
+class CalDAVClient(ICalendarRepository):
 
     def __init__(self, calendar_url: str, username: str, password: str, verify_ssl: bool = True):
         self.calendar_url = calendar_url
@@ -53,25 +54,18 @@ class CalDAVClient:
         except Exception:
             return False
 
-    def put_event(self, uid: str, ical_data: str):
+    def put_event(self, uid: str, ical_data: str) -> bool:
         """
         Upload or update an event to the configured calendar using the caldav library.
         Args:
             uid: Unique identifier for the event (used as filename)
             ical_data: iCalendar string
         Returns:
-            Response object from the underlying HTTP request (for test compatibility), or None on failure
+            True if upload succeeded, False otherwise
         """
         try:
             event = self.calendar.add_event(ical_data)
-            # Try to return the response object if available (for contract test compatibility)
-            if hasattr(event, 'response'):
-                return event.response
-            # If not available, return a mock response object for test compatibility
-            class MockResponse:
-                def __init__(self, status_code):
-                    self.status_code = status_code
-            return MockResponse(201)
+            return True
         except Exception as e:
             return False
 
@@ -85,6 +79,7 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
         Tuple of (iCalendar string, UID)
     """
     from datetime import datetime
+    from datetime import timezone as dt_timezone
     import pytz
     import uuid
 
@@ -99,23 +94,22 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
             return dt_eastern.strftime("%Y%m%dT%H%M%S")
 
     # Default to America/New_York unless overridden
-    timezone = getattr(event, "_ical_timezone", "America/New_York")
-    dtstamp = to_dt(event.start_datetime, timezone)
-    dtstart = to_dt(event.start_datetime, timezone)
-    dtend = to_dt(event.end_datetime, timezone)
+    event_timezone = getattr(event, "_ical_timezone", "America/New_York")
+    dtstamp = to_dt(event.start_datetime, event_timezone)
+    dtstart = to_dt(event.start_datetime, event_timezone)
+    dtend = to_dt(event.end_datetime, event_timezone)
 
     event_uid = uuid.uuid4().hex[:12]
-    from datetime import datetime
-    now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    now_utc = datetime.now(dt_timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     ical_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "CALSCALE:GREGORIAN",
         "PRODID:-//calendar-sync//EN",
-        f"X-WR-TIMEZONE:{timezone}",
+        f"X-WR-TIMEZONE:{event_timezone}",
     ]
     # Add concise VTIMEZONE for America/New_York
-    if timezone == "America/New_York":
+    if event_timezone == "America/New_York":
         ical_lines.extend([
             "BEGIN:VTIMEZONE",
             "TZID:America/New_York",
@@ -146,7 +140,7 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
         "STATUS:CONFIRMED",
         "TRANSP:OPAQUE",
     ])
-    if timezone == "UTC":
+    if event_timezone == "UTC":
         ical_lines.append(f"DTSTART:{dtstart}")
         ical_lines.append(f"DTEND:{dtend}")
     else:

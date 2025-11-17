@@ -5,9 +5,9 @@
 Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale, Nextcloud, Apple Calendar) using OCR and UI automation on macOS.
 
 **Critical Warning:**
-> **When you run `sync_outlook_caldav.py`, _all events in the target CalDAV calendar for the selected date will be deleted before new events are created_. This is a primitive solution to avoid duplicates.**
+> **When you run `sync_outlook_caldav.py`, _only future events (events that haven't ended yet) in the target CalDAV calendar will be deleted before new events are created_. Past events are preserved and will not be affected.**
 > 
-> Make sure you are syncing to a dedicated calendar or are comfortable with this destructive behavior. Existing events for the selected date will be lost and replaced by the events extracted from Outlook.
+> This approach ensures that historical calendar data is maintained while keeping future events synchronized with Outlook. Make sure you are syncing to a dedicated calendar or are comfortable with this behavior for future events.
 
 **Important:**
 > The `caldav_url` in your config **must be the full URL to the calendar collection you want to update** (not just the server root or user path). For Radicale, this is typically:
@@ -23,7 +23,7 @@ Synchronize your Microsoft Outlook Calendar to any CalDAV server (e.g., Radicale
 ## Features
 - Extracts events from Outlook calendar using UI automation and OCR (no Microsoft server/API required)
 - Maps and uploads events to a CalDAV server (supports self-hosted and cloud)
-- **Deletes all events in the target calendar for the selected date before uploading new ones (prevents duplicates)**
+- **Deletes only future events (events that haven't ended yet) in the target calendar before uploading new ones (prevents duplicates while preserving past events)**
 - Robust error handling, logging, and conflict resolution (Outlook always wins)
 - CLI and scheduler support (cron/launchd)
 
@@ -129,8 +129,9 @@ This tool supports sending push notifications to your devices using Pushbullet. 
 ## What to Expect
 - **Outlook will launch and switch to calendar view automatically.**
 - The tool will take a screenshot, run OCR, parse events, and upload them to your CalDAV server.
-- **All events in the target CalDAV calendar for the selected date will be deleted before new events are created.**
-   - This ensures no duplicates, but means any existing events for that date will be lost and replaced by the new sync.
+- **Only future events (events that haven't ended yet) in the target CalDAV calendar will be deleted before new events are created.**
+   - This ensures no duplicates while preserving historical calendar data.
+   - Past events remain untouched and are not affected by the sync.
 - **Log output:**
    - Logs are written to `logs/calendar_sync.log` (and printed to the console)
    - Look for lines like:
@@ -154,8 +155,9 @@ This tool supports sending push notifications to your devices using Pushbullet. 
 - **Automation errors?**
    - Ensure Terminal/Python has Accessibility permissions
 - **Event Deletion & Idempotency:**
-   - The tool deletes all events in the target calendar for the selected date before uploading new ones. This avoids duplicates but is destructive for that date.
-   - There is no incremental sync; all events for the date are replaced each run.
+   - The tool deletes only future events (events that haven't ended yet) in the target calendar before uploading new ones. Past events are preserved.
+   - This avoids duplicates while maintaining historical calendar data.
+   - There is no incremental sync; all future events are replaced each run.
 
 ---
 

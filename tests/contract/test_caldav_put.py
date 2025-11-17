@@ -3,7 +3,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 import pytest
-import requests_mock
+from unittest.mock import Mock, patch
 from src.caldav_client import CalDAVClient
 
 # Mock CalDAV server URL for testing
@@ -14,12 +14,10 @@ def caldav_client():
     return CalDAVClient(MOCK_CALDAV_URL, "testuser", "testpass")
 
 def test_put_caldav_event_contract(caldav_client):
-    with requests_mock.Mocker() as m:
-        # Mock a successful PUT response
-        m.put(f"{MOCK_CALDAV_URL}test_uid.ics", headers={'Content-Type': 'text/calendar; charset=utf-8'}, status_code=201)
-
-        # Example iCalendar data (minimal for contract test)
-        ical_data = """
+    """Test that CalDAVClient.put_event sends the correct data to the calendar"""
+    
+    # Example iCalendar data (minimal for contract test)
+    ical_data = """
 BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Example Corp//Calendar Sync//EN
@@ -33,15 +31,19 @@ END:VEVENT
 END:VCALENDAR
 """
 
-        response = caldav_client.put_event("test_uid", ical_data)
-
-        assert response.status_code == 201
-        assert m.called_once
-        # Normalize line endings and strip whitespace for comparison
-        sent = m.last_request.text.replace('\r\n', '\n').strip()
-        # Instead of exact match, check for key fields
-        assert "BEGIN:VEVENT" in sent
-        assert "SUMMARY:Test Event" in sent
-        assert "UID:test_uid" in sent
-        assert "DTSTART:20250922T110000Z" in sent
-        assert "DTEND:20250922T120000Z" in sent
+    # Mock the calendar.add_event method
+    with patch.object(caldav_client.calendar, 'add_event') as mock_add_event:
+        # Configure the mock to succeed
+        mock_add_event.return_value = Mock()
+        
+        result = caldav_client.put_event("test_uid", ical_data)
+        
+        # Verify the result
+        assert result is True
+        # Verify add_event was called once with the ical data
+        mock_add_event.assert_called_once_with(ical_data)
+        # Verify the ical data contains expected fields
+        args = mock_add_event.call_args[0][0]
+        assert "BEGIN:VEVENT" in args
+        assert "SUMMARY:Test Event" in args
+        assert "UID:test_uid" in args

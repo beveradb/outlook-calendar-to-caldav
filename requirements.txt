@@ -4,3 +4,4 @@ pytesseract
 caldav
 pytz
 google-generativeai
+requests-mock

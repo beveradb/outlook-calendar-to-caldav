@@ -86,3 +86,4 @@ sync_state.json
 
 # Ignore secrets
 secrets.*
+config.json
