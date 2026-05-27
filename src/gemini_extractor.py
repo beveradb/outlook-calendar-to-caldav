@@ -33,8 +33,8 @@ def extract_events_with_gemini(image_path: str, api_key: str) -> List[ParsedEven
     # Configure Gemini
     genai.configure(api_key=api_key)
     
-    # Use Gemini 2.0 Flash with vision capabilities
-    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    # Use Gemini 3.5 Flash with vision capabilities
+    model = genai.GenerativeModel('gemini-3.5-flash')
     
     # Load image
     try:
@@ -109,20 +109,17 @@ Extract all events you can see."""
         
         # Convert to ParsedEvent objects
         parsed_events = []
+        
         for event_data in events_data:
             try:
                 # Combine date and time
                 date_str = event_data['date']
                 start_time_str = event_data['start_time']
                 end_time_str = event_data['end_time']
-                
-                # Create ISO format datetime strings
+
+                # Use times directly (Outlook shows local EST)
                 start_datetime = f"{date_str}T{start_time_str}:00"
                 end_datetime = f"{date_str}T{end_time_str}:00"
-                
-                # Validate datetime format
-                datetime.fromisoformat(start_datetime)
-                datetime.fromisoformat(end_datetime)
                 
                 event = ParsedEvent(
                     start_datetime=start_datetime,

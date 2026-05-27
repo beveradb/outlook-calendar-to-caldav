@@ -87,3 +87,6 @@ sync_state.json
 # Ignore secrets
 secrets.*
 config.json
+
+# Local one-off scripts
+create_agenda_events.py
