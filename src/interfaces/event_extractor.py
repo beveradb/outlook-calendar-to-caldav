@@ -51,6 +51,20 @@ class GeminiEventExtractor(IEventExtractor):
         return extract_events_with_gemini(image_path, self.api_key)
 
 
+class BedrockEventExtractor(IEventExtractor):
+    """Extract events using Claude Vision on AWS Bedrock"""
+
+    def __init__(self, model_id: str = None, region: str = None):
+        from src.bedrock_extractor import DEFAULT_MODEL_ID, DEFAULT_REGION
+        self.model_id = model_id or DEFAULT_MODEL_ID
+        self.region = region or DEFAULT_REGION
+
+    def extract_events(self, image_path: str) -> List[ParsedEvent]:
+        """Extract events using Claude on Bedrock"""
+        from src.bedrock_extractor import extract_events_with_bedrock
+        return extract_events_with_bedrock(image_path, self.model_id, self.region)
+
+
 class FallbackEventExtractor(IEventExtractor):
     """
     Try Gemini first, fall back to OCR if it fails.

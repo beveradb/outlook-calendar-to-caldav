@@ -5,5 +5,8 @@
     "outlook_calendar_name": "Calendar",
     "sync_interval_minutes": 15,
     "log_level": "INFO",
-    "sync_state_filepath": "sync_state.json"
+    "sync_state_filepath": "sync_state.json",
+    "use_bedrock_vision": true,
+    "bedrock_model_id": "us.anthropic.claude-sonnet-4-6",
+    "bedrock_region": "us-east-1"
 }

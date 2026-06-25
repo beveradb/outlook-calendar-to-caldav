@@ -2,6 +2,7 @@ from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
 from src.gemini_extractor import extract_events_with_gemini, extract_events_with_gemini_fallback
+from src.bedrock_extractor import extract_events_with_bedrock
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
 from src.models.calendar_data import ParsedEvent
 from src.utils.logger import setup_logging, log_pushbullet_attempt
@@ -133,11 +134,23 @@ def sync_outlook_to_caldav(
             return False
         logger.info(f"Screenshot captured. Raw: {screenshot_path}, Cropped: {cropped_path}")
 
-        # 6. Process cropped screenshot with OCR or Gemini to get parsed events
+        # 6. Process cropped screenshot with vision model or OCR
+        use_bedrock = getattr(config, "use_bedrock_vision", False)
         use_gemini = getattr(config, "use_gemini_vision", False)
         gemini_api_key = getattr(config, "gemini_api_key", None)
-        
-        if use_gemini and gemini_api_key:
+
+        if use_bedrock:
+            logger.info("Processing cropped screenshot with Claude on Bedrock...")
+            try:
+                parsed_events = extract_events_with_bedrock(
+                    cropped_path,
+                    model_id=getattr(config, "bedrock_model_id", None),
+                    region=getattr(config, "bedrock_region", None),
+                )
+            except Exception as e:
+                logger.warning(f"Bedrock extraction failed, falling back to OCR: {e}")
+                parsed_events = process_image_with_ocr(cropped_path)
+        elif use_gemini and gemini_api_key:
             logger.info("Processing cropped screenshot with Gemini Vision API...")
             try:
                 parsed_events = extract_events_with_gemini(cropped_path, gemini_api_key)

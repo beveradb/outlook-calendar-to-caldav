@@ -19,6 +19,9 @@ class Config:
     pushbullet_api_key: Optional[str] = None
     use_gemini_vision: bool = False
     gemini_api_key: Optional[str] = None
+    use_bedrock_vision: bool = False
+    bedrock_model_id: Optional[str] = None
+    bedrock_region: Optional[str] = None
 
     @classmethod
     def load_from_file(cls, filepath: str = "config.json") -> 'Config':
@@ -51,6 +54,12 @@ class Config:
             # Default gemini_api_key to None if not present
             if "gemini_api_key" not in config_data:
                 config_data["gemini_api_key"] = None
+            if "use_bedrock_vision" not in config_data:
+                config_data["use_bedrock_vision"] = False
+            if "bedrock_model_id" not in config_data:
+                config_data["bedrock_model_id"] = None
+            if "bedrock_region" not in config_data:
+                config_data["bedrock_region"] = None
             return cls(**config_data)
         except FileNotFoundError:
             raise FileNotFoundError(f"Config file not found at {filepath}")
