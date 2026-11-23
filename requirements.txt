@@ -4,5 +4,6 @@ pytesseract
 caldav
 pytz
 google-generativeai
-requests-mockboto3
+requests-mock
+boto3
 icalendar
