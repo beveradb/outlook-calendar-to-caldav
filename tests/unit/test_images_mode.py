@@ -175,3 +175,92 @@ def test_past_parsed_events_not_recreated(cfg, tmp_path):
     assert r["ok"] is True
     assert r["created"] == 2          # Tue 12:15 + Dec 1; Mon and Tue 09:00 already ended
     assert r["per_image"] == [3, 1]   # still counts what Outlook shows
+
+
+# ---- final-review fixes -----------------------------------------------------------
+
+def test_malformed_event_aborts_before_any_delete(cfg, tmp_path):
+    """C1: a bad time from the model must not delete the week and then crash mid-create."""
+    existing = {"u/a.ics": ics("a", datetime(2026, 11, 25, 17, 15, tzinfo=timezone.utc), datetime(2026, 11, 25, 17, 30, tzinfo=timezone.utc))}
+    bad = ParsedEvent(start_datetime="2026-11-25T12:00:00", end_datetime="2026-11-25T11:00:00", title="Backwards")
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, [ev("2026-11-25"), bad]), WeekExtraction(*W1, [])], existing)
+    assert r["ok"] is False and "week 0" in r["error"]
+    c = FakeClient.instances[0] if FakeClient.instances else None
+    assert c is None or (c.deleted == [] and c.put == [])
+
+
+def test_lenient_times_normalised(cfg, tmp_path):
+    """C1: '9:00' and an all-day '24:00' end are read, not fatal."""
+    odd = [ParsedEvent(start_datetime="2026-11-25T9:00:00", end_datetime="2026-11-25T9:30:00", title="Early"),
+           ParsedEvent(start_datetime="2026-11-26T00:00:00", end_datetime="2026-11-26T24:00:00", title="Holiday")]
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, odd), WeekExtraction(*W1, [])])
+    assert r["ok"] is True and r["created"] == 2
+
+
+def test_range_must_match_expected_week(cfg, tmp_path):
+    """C2: w1 still showing week 0 (Outlook didn't redraw) must abort, not duplicate week 0."""
+    existing = {"u/b.ics": ics("b", datetime(2026, 12, 2, 17, 15, tzinfo=timezone.utc), datetime(2026, 12, 2, 17, 30, tzinfo=timezone.utc))}
+    r = sync_from_images(cfg, ["w0.png", "w1.png"], extractor=fake_extractor([
+        WeekExtraction(*W0, [ev("2026-11-25")]), WeekExtraction(*W0, [ev("2026-11-25")])]),
+        client_factory=factory(existing), now=NOW, archive_dir=str(tmp_path / "a"),
+        expect_weeks=[date(2026, 11, 23), date(2026, 11, 30)])
+    assert r["ok"] is False and "week 1" in r["error"]
+    c = FakeClient.instances[0] if FakeClient.instances else None
+    assert c is None or (c.deleted == [] and c.put == [])
+
+
+def test_overlapping_or_overlong_ranges_rejected(cfg, tmp_path):
+    """C2: without expected weeks, a misread year-long or overlapping range must still abort."""
+    r = run(cfg, tmp_path, [WeekExtraction(date(2026, 11, 23), date(2027, 11, 27), []), WeekExtraction(*W1, [])])
+    assert r["ok"] is False
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, []), WeekExtraction(*W0, [])])
+    assert r["ok"] is False
+
+
+def test_duplicate_rows_created_once(cfg, tmp_path):
+    """I1: overlapping stitched captures repeat rows; each (title, start) is created once."""
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, [ev("2026-11-25"), ev("2026-11-25"), ev("2026-11-26")]),
+                            WeekExtraction(*W1, [])])
+    assert r["ok"] is True and r["created"] == 2 and r["per_image"] == [2, 0]
+
+
+def test_uid_is_deterministic(cfg, tmp_path):
+    """I4: a retried PUT of the same event lands on the same resource, never a second copy."""
+    run(cfg, tmp_path, [WeekExtraction(*W0, [ev("2026-11-25")]), WeekExtraction(*W1, [])])
+    first = list(FakeClient.instances[0].put)
+    run(cfg, tmp_path, [WeekExtraction(*W0, [ev("2026-11-25")]), WeekExtraction(*W1, [])])
+    assert FakeClient.instances[0].put == first
+
+
+def test_client_failures_raise_so_retry_works():
+    """I4: the real client must raise on failure (it returned False, so _retry never retried)."""
+    from unittest import mock
+    from src.caldav_client import CalDAVClient
+    c = CalDAVClient.__new__(CalDAVClient)
+    c.calendar = mock.Mock()
+    c.calendar.add_event.side_effect = ConnectionError("boom")
+    with pytest.raises(ConnectionError):
+        c.put_event("u", "ics")
+    c.calendar.event_by_url.return_value.delete.side_effect = ConnectionError("boom")
+    with pytest.raises(ConnectionError):
+        c.delete_event("https://cal/x/u.ics")
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_delay(monkeypatch):
+    monkeypatch.setattr(sync_tool, "RETRY_DELAY_S", 0)
+
+
+def test_cli_passes_expect_weeks(tmp_path, monkeypatch):
+    import sync_outlook_caldav
+    seen = {}
+
+    def fake(cfgp, images, dry_run=False, expect_weeks=None):
+        seen["weeks"] = expect_weeks
+        return {"ok": True, "created": 0, "deleted": 0, "per_image": [], "ranges": [], "error": None}
+    monkeypatch.setattr(sync_outlook_caldav, "sync_from_images", fake)
+    monkeypatch.setattr(sys, "argv", ["x", "--images", "a.png", "b.png", "--expect-weeks",
+                                      "2026-11-23", "2026-11-30", "--json-result", str(tmp_path / "r.json")])
+    with pytest.raises(SystemExit):
+        sync_outlook_caldav.main()
+    assert seen["weeks"] == [date(2026, 11, 23), date(2026, 11, 30)]

@@ -37,6 +37,13 @@ def main():
              "captures of one week with '+'). Skips launching Outlook and screenshotting.",
     )
     parser.add_argument(
+        "--expect-weeks",
+        nargs="+",
+        metavar="YYYY-MM-DD",
+        help="With --images: the Monday each capture should show (one per image). A capture "
+             "whose visible range doesn't start on its Monday aborts the sync.",
+    )
+    parser.add_argument(
         "--json-result",
         metavar="PATH",
         help="With --images: write {ok, created, deleted, per_image, ranges, error} here.",
@@ -48,7 +55,12 @@ def main():
         logger = setup_logging()
         logger.info(f"Starting parse-only sync of {len(args.images)} capture(s).")
         try:
-            result = sync_from_images(args.config, args.images, dry_run=args.dry_run)
+            from datetime import date
+            weeks = [date.fromisoformat(w) for w in args.expect_weeks] if args.expect_weeks else None
+            if weeks is not None and len(weeks) != len(args.images):
+                raise ValueError("--expect-weeks needs one Monday per --images entry")
+            result = sync_from_images(args.config, args.images, dry_run=args.dry_run,
+                                      expect_weeks=weeks)
         except Exception as e:
             logger.exception("Parse-only sync failed")
             result = {"ok": False, "created": 0, "deleted": 0, "per_image": [], "ranges": [],

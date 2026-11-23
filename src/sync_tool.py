@@ -435,8 +435,40 @@ def _prepare_image(spec: str, workdir: str) -> str:
     return dst
 
 
+_TIME_RE = None
+
+
+def _norm_local(s: str):
+    """'2026-11-25T9:00:00' / '…T24:00:00' → naive datetime (24:00 → 23:59); None if unreadable."""
+    import re
+    global _TIME_RE
+    _TIME_RE = _TIME_RE or re.compile(r"^(\d{4}-\d{2}-\d{2})T(\d{1,2}):(\d{2})(?::(\d{2}))?$")
+    m = _TIME_RE.match(str(s or "").strip())
+    if not m:
+        return None
+    h, mi = int(m.group(2)), int(m.group(3))
+    if (h, mi) == (24, 0):
+        h, mi = 23, 59
+    if h > 23 or mi > 59:
+        return None
+    try:
+        return _dt.fromisoformat(f"{m.group(1)}T{h:02d}:{mi:02d}:00")
+    except ValueError:
+        return None
+
+
+RETRY_DELAY_S = 5
+
+
+def _stable_uid(title: str, start: str) -> str:
+    """Same Outlook event → same CalDAV resource, so a retried PUT can't make a copy."""
+    import hashlib
+    return hashlib.sha1(f"{title.strip()}|{start}".encode()).hexdigest()[:12]
+
+
 def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
-                     extractor=None, client_factory=None, now=None, archive_dir=None) -> dict:
+                     extractor=None, client_factory=None, now=None, archive_dir=None,
+                     expect_weeks=None) -> dict:
     """
     Sync Outlook week captures to CalDAV. Every capture must prove which week it shows
     (WeekExtraction.range_*); nothing is deleted or created unless ALL captures do.
@@ -464,21 +496,62 @@ def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
             if wk.range_start is None or wk.range_end is None:
                 result["error"] = f"week {i}: could not read the week's date range; not syncing"
                 return result
+            if (wk.range_end - wk.range_start).days > 6:
+                result["error"] = f"week {i}: implausible range {wk.range_start}..{wk.range_end}; not syncing"
+                return result
+            if expect_weeks is not None:
+                monday = expect_weeks[i]
+                if wk.range_start != monday or (wk.range_end - monday).days > 6:
+                    result["error"] = (f"week {i}: capture shows {wk.range_start}..{wk.range_end}, "
+                                       f"expected the week of {monday}; not syncing")
+                    return result
             kept = []
             for ev in wk.events:
-                d = _date.fromisoformat(ev.start_datetime[:10])
-                if wk.range_start <= d <= wk.range_end:
+                st, en = _norm_local(ev.start_datetime), _norm_local(ev.end_datetime)
+                if st is None or en is None or en <= st:
+                    result["error"] = f"week {i}: unreadable event times ({ev.start_datetime} - {ev.end_datetime}); not syncing"
+                    return result
+                ev.start_datetime, ev.end_datetime = st.isoformat(), en.isoformat()
+                if wk.range_start <= st.date() <= wk.range_end:
                     kept.append(ev)
                 else:
-                    logger.warning(f"week {i}: dropping event dated {d} outside {wk.range_start}..{wk.range_end}")
+                    logger.warning(f"week {i}: dropping event dated {st.date()} outside {wk.range_start}..{wk.range_end}")
             weeks.append((wk.range_start, wk.range_end, kept))
+
+    for a in range(len(weeks)):
+        for b in range(a + 1, len(weeks)):
+            if weeks[a][0] <= weeks[b][1] and weeks[b][0] <= weeks[a][1]:
+                result["error"] = f"weeks {a} and {b} overlap; not syncing"
+                return result
+
+    # De-dupe by (title, start): stitched captures overlap, and a row may repeat.
+    seen = set()
+    for idx, (s_, e_, kept) in enumerate(weeks):
+        uniq = []
+        for ev in kept:
+            key = (ev.title.strip(), ev.start_datetime)
+            if key not in seen:
+                seen.add(key)
+                uniq.append(ev)
+        weeks[idx] = (s_, e_, uniq)
 
     result["ranges"] = [[s.isoformat(), e.isoformat()] for s, e, _ in weeks]
     result["per_image"] = [len(k) for _, _, k in weeks]
 
+    # Build every event before touching CalDAV, so nothing can fail between delete and create.
+    et = _ZoneInfo("America/New_York")
+    to_create = []
+    for _, _, kept in weeks:
+        for ev in kept:
+            if _dt.fromisoformat(ev.end_datetime).replace(tzinfo=et) <= now:
+                continue   # already ended: kept on CalDAV (never deleted), so re-creating would duplicate it
+            uid = _stable_uid(ev.title, ev.start_datetime)
+            ical, uid = map_parsed_event_to_ical(ev, uid=uid)
+            to_create.append((ev, ical, uid))
+
     client = client_factory(config.caldav_url, config.caldav_username, config.caldav_password,
                             getattr(config, "verify_ssl", True))
-    existing = _retry(client.get_events, retries=3, delay=5)
+    existing = _retry(client.get_events, retries=3, delay=RETRY_DELAY_S)
     os.makedirs(archive_dir, exist_ok=True)
     for url, obj in existing.items():
         b = _event_bounds_utc(obj)
@@ -498,22 +571,19 @@ def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
             logger.error(f"Failed to back up {name}: {e}")
         if dry_run:
             logger.info(f"[DRY RUN] Would delete {url}")
-        elif not _retry(lambda: client.delete_event(url), retries=3, delay=5):
-            result["error"] = f"could not delete {name}"
-            return result
+        else:
+            try:
+                _retry(lambda: client.delete_event(url), retries=3, delay=RETRY_DELAY_S)
+            except Exception as e:
+                result["error"] = f"could not delete {name}: {e}"
+                return result
         result["deleted"] += 1
 
-    et = _ZoneInfo("America/New_York")
-    for _, _, kept in weeks:
-        for ev in kept:
-            if _dt.fromisoformat(ev.end_datetime).replace(tzinfo=et) <= now:
-                continue   # already ended: kept on CalDAV above, so re-creating would duplicate it
-            ical, uid = map_parsed_event_to_ical(ev)
-            if dry_run:
-                logger.info(f"[DRY RUN] Would create {uid}")
-            elif not _retry(lambda: client.put_event(uid, ical), retries=3, delay=5):
-                result["error"] = f"could not create event {uid}"
-                return result
-            result["created"] += 1
+    for ev, ical, uid in to_create:
+        if dry_run:
+            logger.info(f"[DRY RUN] Would create {uid}")
+        else:
+            _retry(lambda: client.put_event(uid, ical), retries=3, delay=RETRY_DELAY_S)
+        result["created"] += 1
     result["ok"] = True
     return result
