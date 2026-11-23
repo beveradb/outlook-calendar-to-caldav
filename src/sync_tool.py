@@ -2,7 +2,7 @@ from src.config import Config
 from src.outlook_automation import launch_outlook, navigate_to_calendar, capture_screenshot
 from src.ocr_processor import process_image_with_ocr, parse_outlook_event_from_ocr
 from src.gemini_extractor import extract_events_with_gemini, extract_events_with_gemini_fallback
-from src.bedrock_extractor import extract_events_with_bedrock
+from src.bedrock_extractor import extract_events_with_bedrock, extract_week_with_bedrock
 from src.caldav_client import CalDAVClient, map_parsed_event_to_ical
 from src.models.calendar_data import ParsedEvent
 from src.utils.logger import setup_logging, log_pushbullet_attempt
@@ -388,3 +388,129 @@ def sync_outlook_to_caldav(
             api_key = None
         notification_func(api_key, f"Outlook to CalDAV sync failed: {e}", "Calendar Sync")
         return False
+
+
+# ---------------------------------------------------------------------------
+# Parse-only mode (--images): the pgemac agent drives Outlook and hands us captures.
+# ---------------------------------------------------------------------------
+from datetime import date as _date, datetime as _dt, time as _time, timezone as _tz
+from zoneinfo import ZoneInfo as _ZoneInfo
+
+
+def _event_bounds_utc(event_obj):
+    """(start_utc, end_utc) of a caldav event object, or None if it cannot be read."""
+    from icalendar import Calendar
+    data = getattr(event_obj, "data", None) or str(event_obj)
+    try:
+        vevent = next(c for c in Calendar.from_ical(data).walk() if c.name == "VEVENT")
+    except Exception:
+        return None
+    dtstart, dtend = vevent.get("dtstart"), vevent.get("dtend")
+    if dtstart is None:
+        return None
+
+    def utc(v, end_of_day=False):
+        if isinstance(v, _dt):
+            return (v if v.tzinfo else v.replace(tzinfo=_tz.utc)).astimezone(_tz.utc)
+        return _dt.combine(v, _time.max if end_of_day else _time.min).replace(tzinfo=_tz.utc)
+
+    start = utc(dtstart.dt)
+    if dtend is not None:
+        end = utc(dtend.dt, end_of_day=not isinstance(dtend.dt, _dt))
+    elif vevent.get("duration") is not None:
+        end = start + vevent.get("duration").dt
+    else:
+        end = utc(dtstart.dt, end_of_day=True)
+    return start, end
+
+
+def _prepare_image(spec: str, workdir: str) -> str:
+    """'a.png' -> 'a.png'; 'a.png+b.png' (one week scrolled) -> a stitched PNG in workdir."""
+    parts = spec.split("+")
+    if len(parts) == 1:
+        return parts[0]
+    from src.stitch import stitch_vertical
+    dst = os.path.join(workdir, "stitched_" + os.path.basename(parts[0]))
+    stitch_vertical(parts, dst)
+    return dst
+
+
+def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
+                     extractor=None, client_factory=None, now=None, archive_dir=None) -> dict:
+    """
+    Sync Outlook week captures to CalDAV. Every capture must prove which week it shows
+    (WeekExtraction.range_*); nothing is deleted or created unless ALL captures do.
+    Deletion is limited to future events whose start date falls inside a proven range.
+    Returns the --json-result dict.
+    """
+    import tempfile
+    extractor = extractor or extract_week_with_bedrock
+    client_factory = client_factory or CalDAVClient
+    now = now or _dt.now(_tz.utc)
+    archive_dir = archive_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ics_deleted")
+    result = {"ok": False, "created": 0, "deleted": 0, "per_image": [], "ranges": [], "error": None}
+
+    config = Config.load_from_file(config_filepath)
+    weeks = []
+    with tempfile.TemporaryDirectory() as work:
+        for i, spec in enumerate(images):
+            try:
+                wk = extractor(_prepare_image(spec, work),
+                               model_id=getattr(config, "bedrock_model_id", None),
+                               region=getattr(config, "bedrock_region", None))
+            except Exception as e:   # no OCR fallback here: OCR was replaced for being flaky
+                result["error"] = f"week {i}: extraction failed: {e}"
+                return result
+            if wk.range_start is None or wk.range_end is None:
+                result["error"] = f"week {i}: could not read the week's date range; not syncing"
+                return result
+            kept = []
+            for ev in wk.events:
+                d = _date.fromisoformat(ev.start_datetime[:10])
+                if wk.range_start <= d <= wk.range_end:
+                    kept.append(ev)
+                else:
+                    logger.warning(f"week {i}: dropping event dated {d} outside {wk.range_start}..{wk.range_end}")
+            weeks.append((wk.range_start, wk.range_end, kept))
+
+    result["ranges"] = [[s.isoformat(), e.isoformat()] for s, e, _ in weeks]
+    result["per_image"] = [len(k) for _, _, k in weeks]
+
+    client = client_factory(config.caldav_url, config.caldav_username, config.caldav_password,
+                            getattr(config, "verify_ssl", True))
+    existing = _retry(client.get_events, retries=3, delay=5)
+    os.makedirs(archive_dir, exist_ok=True)
+    for url, obj in existing.items():
+        b = _event_bounds_utc(obj)
+        if b is None:
+            continue   # unreadable: never delete what we can't place in a range
+        start, end = b
+        if end <= now:
+            continue
+        sd = start.astimezone(_ZoneInfo("America/New_York")).date()   # Outlook shows ET days
+        if not any(s <= sd <= e for s, e, _ in weeks):
+            continue
+        name = str(url).rstrip("/").split("/")[-1]
+        try:
+            with open(os.path.join(archive_dir, f"deleted_{name}"), "w", encoding="utf-8") as f:
+                f.write(getattr(obj, "data", "") or "")
+        except OSError as e:
+            logger.error(f"Failed to back up {name}: {e}")
+        if dry_run:
+            logger.info(f"[DRY RUN] Would delete {url}")
+        elif not _retry(lambda: client.delete_event(url), retries=3, delay=5):
+            result["error"] = f"could not delete {name}"
+            return result
+        result["deleted"] += 1
+
+    for _, _, kept in weeks:
+        for ev in kept:
+            ical, uid = map_parsed_event_to_ical(ev)
+            if dry_run:
+                logger.info(f"[DRY RUN] Would create {uid}")
+            elif not _retry(lambda: client.put_event(uid, ical), retries=3, delay=5):
+                result["error"] = f"could not create event {uid}"
+                return result
+            result["created"] += 1
+    result["ok"] = True
+    return result

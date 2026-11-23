@@ -1,11 +1,12 @@
 import argparse
+import json
 import sys
 import os
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
-from src.sync_tool import sync_outlook_to_caldav
+from src.sync_tool import sync_outlook_to_caldav, sync_from_images
 from src.utils.logger import setup_logging
 
 def main():
@@ -28,7 +29,35 @@ def main():
         help="Perform a dry run: log actions but do not modify the remote CalDAV server."
     )
 
+    parser.add_argument(
+        "--images",
+        nargs="+",
+        metavar="IMG",
+        help="Parse-only mode: sync these Outlook week captures (one per week; join scrolled "
+             "captures of one week with '+'). Skips launching Outlook and screenshotting.",
+    )
+    parser.add_argument(
+        "--json-result",
+        metavar="PATH",
+        help="With --images: write {ok, created, deleted, per_image, ranges, error} here.",
+    )
+
     args = parser.parse_args()
+
+    if args.images:
+        logger = setup_logging()
+        logger.info(f"Starting parse-only sync of {len(args.images)} capture(s).")
+        try:
+            result = sync_from_images(args.config, args.images, dry_run=args.dry_run)
+        except Exception as e:
+            logger.exception("Parse-only sync failed")
+            result = {"ok": False, "created": 0, "deleted": 0, "per_image": [], "ranges": [],
+                      "error": f"{type(e).__name__}: {e}"}
+        if args.json_result:
+            with open(args.json_result, "w") as f:
+                json.dump(result, f)
+        logger.info(f"Result: {result}")
+        sys.exit(0 if result["ok"] else 1)
 
     logger = setup_logging()
     logger.info("Starting Outlook to CalDAV synchronization.")
