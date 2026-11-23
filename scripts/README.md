@@ -1,5 +1,9 @@
 # Scheduling the Outlook-to-CalDAV Sync Tool
 
+> **On the PG&E Mac, the pgemac agent schedules this tool** (see the main README, "Scheduling").
+> The old `com.beveradb.outlook-caldav-sync` LaunchAgent was removed on 2026-11-23: it pointed at a
+> missing `run_sync.sh`, and AppleScript-driven Outlook navigation hangs on that managed Mac.
+
 This directory contains example scripts for scheduling the sync tool to run automatically on macOS (launchd) or Unix-like systems (cron).
 
 ## 1. Using Cron (cross-platform, simple)
