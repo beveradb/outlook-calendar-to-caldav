@@ -503,8 +503,11 @@ def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
             return result
         result["deleted"] += 1
 
+    et = _ZoneInfo("America/New_York")
     for _, _, kept in weeks:
         for ev in kept:
+            if _dt.fromisoformat(ev.end_datetime).replace(tzinfo=et) <= now:
+                continue   # already ended: kept on CalDAV above, so re-creating would duplicate it
             ical, uid = map_parsed_event_to_ical(ev)
             if dry_run:
                 logger.info(f"[DRY RUN] Would create {uid}")

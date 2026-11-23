@@ -162,3 +162,16 @@ def test_json_result_written_on_exception(tmp_path, monkeypatch):
     assert e.value.code == 1
     d = json.loads(out.read_text())
     assert d["ok"] is False and d["error"]
+
+
+def test_past_parsed_events_not_recreated(cfg, tmp_path):
+    # NOW = Tue 2026-11-24 10:00 ET. Monday's standup ended; it was kept (not deleted), so it
+    # must not be created again either, or every run adds a duplicate of each past event.
+    r = run(cfg, tmp_path, [
+        WeekExtraction(*W0, [ev("2026-11-23"), ev("2026-11-24", start="09:00", end="09:30"),
+                             ev("2026-11-24", start="12:15", end="12:30")]),
+        WeekExtraction(*W1, [ev("2026-12-01")]),
+    ])
+    assert r["ok"] is True
+    assert r["created"] == 2          # Tue 12:15 + Dec 1; Mon and Tue 09:00 already ended
+    assert r["per_image"] == [3, 1]   # still counts what Outlook shows
