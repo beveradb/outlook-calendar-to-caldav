@@ -1,5 +1,6 @@
 
 from dataclasses import dataclass, field
+from datetime import date
 import json
 import os
 
@@ -23,3 +24,15 @@ class ParsedEvent:
     description: str | None = None
     confidence_score: float = 0.0
     _ical_timezone: str = "America/New_York"
+
+
+@dataclass
+class WeekExtraction:
+    """
+    Events read from one Outlook week capture, plus the date range the capture shows.
+    range_start/range_end are None when the visible date range could not be read; such a
+    capture must never be used to delete events.
+    """
+    range_start: "date | None"
+    range_end: "date | None"
+    events: list = field(default_factory=list)

@@ -5,3 +5,5 @@ caldav
 pytz
 google-generativeai
 requests-mock
+boto3
+icalendar

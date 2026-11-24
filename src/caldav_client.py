@@ -39,37 +39,20 @@ class CalDAVClient(ICalendarRepository):
 
     def delete_event(self, event_url: str) -> bool:
         """
-        Delete an event from the configured calendar by its full URL.
-        Args:
-            event_url: Full URL to the event resource
-        Returns:
-            True if deletion succeeded, False otherwise
+        Delete an event by its full URL. Raises on failure (so callers' retries work).
         """
-        try:
-            for event in self.calendar.events():
-                if event.url == event_url:
-                    event.delete()
-                    return True
-            return False
-        except Exception:
-            return False
+        self.calendar.event_by_url(event_url).delete()
+        return True
 
     def put_event(self, uid: str, ical_data: str) -> bool:
         """
-        Upload or update an event to the configured calendar using the caldav library.
-        Args:
-            uid: Unique identifier for the event (used as filename)
-            ical_data: iCalendar string
-        Returns:
-            True if upload succeeded, False otherwise
+        Upload an event (the resource name follows its UID, so re-putting is idempotent).
+        Raises on failure (so callers' retries work).
         """
-        try:
-            event = self.calendar.add_event(ical_data)
-            return True
-        except Exception as e:
-            return False
+        self.calendar.add_event(ical_data)
+        return True
 
-def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
+def map_parsed_event_to_ical(event: ParsedEvent, uid: str = None) -> tuple[str, str]:
     """
     Convert a ParsedEvent object to an iCalendar (VCALENDAR) string and generate a UID.
     Args:
@@ -99,7 +82,7 @@ def map_parsed_event_to_ical(event: ParsedEvent) -> tuple[str, str]:
     dtstart = to_dt(event.start_datetime, event_timezone)
     dtend = to_dt(event.end_datetime, event_timezone)
 
-    event_uid = uuid.uuid4().hex[:12]
+    event_uid = uid or uuid.uuid4().hex[:12]
     now_utc = datetime.now(dt_timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     ical_lines = [
         "BEGIN:VCALENDAR",

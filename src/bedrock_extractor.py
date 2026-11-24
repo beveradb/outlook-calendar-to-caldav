@@ -8,19 +8,21 @@ calendar screenshots. Authenticates using the ambient AWS credentials
 
 import base64
 import json
+import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from typing import List
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, TokenRetrievalError
 
-from src.models.calendar_data import ParsedEvent
+from src.models.calendar_data import ParsedEvent, WeekExtraction
 from src.utils.logger import logger
 
 DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_REGION = "us-east-1"
+SSO_LOGIN_TIMEOUT = 120  # seconds; unattended runs must never hang on a login
 
 
 def _ensure_aws_session() -> None:
@@ -34,11 +36,15 @@ def _ensure_aws_session() -> None:
         logger.debug("AWS SSO session is active")
     except (NoCredentialsError, TokenRetrievalError, ClientError) as e:
         logger.warning(f"AWS credentials expired or missing ({e}), triggering SSO login...")
-        result = subprocess.run(
-            ["aws", "sso", "login"],
-            check=False,
-            capture_output=False,
-        )
+        try:
+            result = subprocess.run(
+                ["aws", "sso", "login"],
+                check=False,
+                capture_output=False,
+                timeout=SSO_LOGIN_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"aws sso login timed out after {SSO_LOGIN_TIMEOUT}s")
         if result.returncode != 0:
             raise RuntimeError(
                 "aws sso login failed. Please run 'aws sso login' manually."
@@ -188,3 +194,91 @@ Extract all events you can see."""
             continue
 
     return parsed_events
+
+
+def _invoke_vision(image_path: str, prompt: str, model_id: str, region: str) -> str:
+    """Send one image + prompt to Claude on Bedrock; return the reply text without code fences."""
+    with open(image_path, "rb") as f:
+        image_base64 = base64.b64encode(f.read()).decode("utf-8")
+    ext = image_path.lower().rsplit(".", 1)[-1]
+    media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(ext, "image/png")
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 8192,
+        "messages": [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_base64}},
+            {"type": "text", "text": prompt},
+        ]}],
+    })
+    client = boto3.client("bedrock-runtime", region_name=region)
+    logger.info(f"Sending {os.path.basename(image_path)} to Claude on Bedrock ({model_id})...")
+    response = client.invoke_model(modelId=model_id, contentType="application/json",
+                                   accept="application/json", body=body)
+    text = json.loads(response["body"].read())["content"][0]["text"].strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
+
+WEEK_PROMPT = """You are reading a screenshot of the Microsoft Outlook for Mac window showing a
+calendar in Work Week view with the List layout. The header near the top shows the date range of
+the week being displayed (e.g. "November 23 - November 27, 2026"); day headers such as
+"Monday, November 23" group the events below them.
+
+Return ONE JSON object and nothing else:
+{
+  "range": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
+  "events": [
+    {"title": "...", "date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM",
+     "location": "optional", "description": "optional"}
+  ]
+}
+
+Rules:
+- "range" is the date range printed in the window's header. Read it from the header text, not
+  from today's date. If you cannot read it with certainty, set "range" to null.
+- Take each event's date from the day header it sits under.
+- Times are 24-hour, as shown in the row (e.g. "Tue 11/24/26, 12:15 (15 minutes)" means
+  start 12:15, end 12:30; "14:00 - 15:00" means start 14:00, end 15:00).
+- For an all-day or multi-day event use start_time "00:00" and end_time "23:59" on the date
+  under which it is listed.
+- Skip events whose title is struck through or starts with "Canceled:".
+- Include every remaining row. If there are no events, return "events": []."""
+
+
+def _parse_date(s):
+    try:
+        return date.fromisoformat(str(s))
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_week_with_bedrock(image_path: str, model_id: str = None, region: str = None) -> WeekExtraction:
+    """
+    Extract one week's events AND the visible date range from an Outlook List-view capture.
+    The range is what makes a capture trustworthy enough to delete against; it is None
+    when the model could not read it.
+    """
+    _ensure_aws_session()
+    text = _invoke_vision(image_path, WEEK_PROMPT, model_id or DEFAULT_MODEL_ID, region or DEFAULT_REGION)
+    data = json.loads(text)
+    rng = data.get("range") or {}
+    start, end = _parse_date(rng.get("start")), _parse_date(rng.get("end"))
+    if not (start and end and start <= end):
+        start = end = None
+    events = []
+    for e in data.get("events") or []:
+        try:
+            events.append(ParsedEvent(
+                start_datetime=f"{e['date']}T{e['start_time']}:00",
+                end_datetime=f"{e['date']}T{e['end_time']}:00",
+                title=e["title"], location=e.get("location"), description=e.get("description"),
+                confidence_score=0.95))
+        except (KeyError, TypeError) as err:
+            logger.warning(f"Skipping malformed event from Claude: {err}")
+    logger.info(f"{os.path.basename(image_path)}: range {start}..{end}, {len(events)} events")
+    return WeekExtraction(start, end, events)

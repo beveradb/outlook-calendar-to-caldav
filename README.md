@@ -161,8 +161,30 @@ This tool supports sending push notifications to your devices using Pushbullet. 
 
 ---
 
-## Scheduling (Optional)
-- See `scripts/README.md` for instructions on running the tool automatically with `cron` or `launchd`.
+## Scheduling
+
+On the PG&E Mac this tool is **run by the pgemac agent** (repo `beveradb/home-servers-config`,
+`pgemac/agent/`, "Background tasks"), not by cron or launchd. The agent drives Outlook through the
+Accessibility API, captures this week and next week, and calls this tool in parse-only mode:
+
+```sh
+AWS_PROFILE=PGE-LZCommonVPC-Dev-514712703977 .venv/bin/python sync_outlook_caldav.py \
+    --config config.json --images w0.png w1.png --json-result result.json [--dry-run]
+```
+
+- `--images`: one Outlook Work Week **List-view** window capture per week. Captures of one scrolled
+  week can be joined with `+` (`w0.png+w0_1.png`); they're stitched top to bottom. In this mode the
+  tool doesn't launch Outlook or take screenshots, and there's **no OCR fallback**.
+- Claude on Bedrock returns each capture's visible **date range** as well as its events. If any
+  capture's range can't be read, nothing is deleted or created. Events outside their capture's range
+  are dropped.
+- **Deletes are limited** to future events whose start date (America/New_York) falls in one of those
+  ranges. Struck-through or "Canceled:" rows are skipped.
+- `--json-result` writes `{ok, created, deleted, per_image, ranges, error}`. The exit code is 0 when
+  `ok`, otherwise 1.
+- The `aws sso login` that runs when credentials have expired times out after 120 s.
+
+The old `scripts/` cron/launchd examples remain for other setups; see `scripts/README.md`.
 
 ---
 
