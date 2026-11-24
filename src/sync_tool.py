@@ -395,11 +395,17 @@ def sync_outlook_to_caldav(
 # ---------------------------------------------------------------------------
 from datetime import date as _date, datetime as _dt, time as _time, timezone as _tz
 from zoneinfo import ZoneInfo as _ZoneInfo
+from datetime import timedelta
 
 
 def _event_bounds_utc(event_obj):
-    """(start_utc, end_utc) of a caldav event object, or None if it cannot be read."""
+    """(start_utc, end_utc, start_day, uid) of a caldav event object, or None if unreadable.
+
+    Date-only (all-day) values are calendar days in America/New_York, not UTC instants, and
+    an all-day DTEND is exclusive (RFC 5545). start_day is the ET calendar day it starts on.
+    """
     from icalendar import Calendar
+    et = _ZoneInfo("America/New_York")
     data = getattr(event_obj, "data", None) or str(event_obj)
     try:
         vevent = next(c for c in Calendar.from_ical(data).walk() if c.name == "VEVENT")
@@ -409,19 +415,24 @@ def _event_bounds_utc(event_obj):
     if dtstart is None:
         return None
 
-    def utc(v, end_of_day=False):
+    def instant(v):
         if isinstance(v, _dt):
             return (v if v.tzinfo else v.replace(tzinfo=_tz.utc)).astimezone(_tz.utc)
-        return _dt.combine(v, _time.max if end_of_day else _time.min).replace(tzinfo=_tz.utc)
+        return _dt.combine(v, _time.min).replace(tzinfo=et).astimezone(_tz.utc)   # ET midnight
 
-    start = utc(dtstart.dt)
+    s0 = dtstart.dt
+    start = instant(s0)
+    start_day = s0.astimezone(et).date() if isinstance(s0, _dt) and s0.tzinfo else (
+        s0.date() if isinstance(s0, _dt) else s0)
     if dtend is not None:
-        end = utc(dtend.dt, end_of_day=not isinstance(dtend.dt, _dt))
+        end = instant(dtend.dt)                     # exclusive for DATE values: ET midnight
     elif vevent.get("duration") is not None:
         end = start + vevent.get("duration").dt
+    elif not isinstance(s0, _dt):
+        end = instant(s0 + timedelta(days=1))       # all-day with no DTEND: one day
     else:
-        end = utc(dtstart.dt, end_of_day=True)
-    return start, end
+        end = start
+    return start, end, start_day, str(vevent.get("uid") or "")
 
 
 def _prepare_image(spec: str, workdir: str) -> str:
@@ -552,16 +563,32 @@ def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
     client = client_factory(config.caldav_url, config.caldav_username, config.caldav_password,
                             getattr(config, "verify_ssl", True))
     existing = _retry(client.get_events, retries=3, delay=RETRY_DELAY_S)
+
+    # 1) Upload first. UIDs are stable, so a PUT overwrites the existing copy of the same
+    #    event; if an upload fails, nothing has been deleted yet and the old events stay.
+    new_uids = set()
+    for ev, ical, uid in to_create:
+        if dry_run:
+            logger.info(f"[DRY RUN] Would create {uid}")
+        else:
+            try:
+                _retry(lambda: client.put_event(uid, ical), retries=3, delay=RETRY_DELAY_S)
+            except Exception as e:
+                result["error"] = f"could not create event {uid}: {e}"
+                return result
+        new_uids.add(uid)
+        result["created"] += 1
+
+    # 2) Then delete future events in the synced weeks that weren't just (re)written.
     os.makedirs(archive_dir, exist_ok=True)
     for url, obj in existing.items():
         b = _event_bounds_utc(obj)
         if b is None:
             continue   # unreadable: never delete what we can't place in a range
-        start, end = b
-        if end <= now:
+        start, end, start_day, uid = b
+        if end <= now or uid in new_uids:
             continue
-        sd = start.astimezone(_ZoneInfo("America/New_York")).date()   # Outlook shows ET days
-        if not any(s <= sd <= e for s, e, _ in weeks):
+        if not any(s <= start_day <= e for s, e, _ in weeks):
             continue
         name = str(url).rstrip("/").split("/")[-1]
         try:
@@ -579,11 +606,5 @@ def sync_from_images(config_filepath: str, images: list, dry_run: bool = False,
                 return result
         result["deleted"] += 1
 
-    for ev, ical, uid in to_create:
-        if dry_run:
-            logger.info(f"[DRY RUN] Would create {uid}")
-        else:
-            _retry(lambda: client.put_event(uid, ical), retries=3, delay=RETRY_DELAY_S)
-        result["created"] += 1
     result["ok"] = True
     return result

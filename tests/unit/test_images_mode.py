@@ -264,3 +264,63 @@ def test_cli_passes_expect_weeks(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         sync_outlook_caldav.main()
     assert seen["weeks"] == [date(2026, 11, 23), date(2026, 11, 30)]
+
+
+# ---- CodeRabbit fixes -----------------------------------------------------------------
+
+def ics_allday(uid, day, end_day):
+    cal = Calendar()
+    e = Event()
+    e.add("uid", uid)
+    e.add("summary", "x")
+    e.add("dtstart", day)
+    e.add("dtend", end_day)
+    cal.add_component(e)
+    return cal.to_ical().decode()
+
+
+def test_all_day_outside_range_kept(cfg, tmp_path):
+    """A Saturday all-day event (DATE 11-28) is not in a Mon–Fri 11-23..27 capture."""
+    existing = {"u/sat.ics": ics_allday("sat", date(2026, 11, 28), date(2026, 11, 29))}
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, []), WeekExtraction(*W1, [])], existing)
+    assert r["ok"] is True and FakeClient.instances[0].deleted == []
+
+
+def test_all_day_dtend_is_exclusive(cfg, tmp_path):
+    """An all-day 11-23 event (DTEND 11-24) has ended by Tue 11-24 10:00 ET: keep it."""
+    existing = {"u/mon.ics": ics_allday("mon", date(2026, 11, 23), date(2026, 11, 24))}
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, []), WeekExtraction(*W1, [])], existing)
+    assert r["ok"] is True and FakeClient.instances[0].deleted == []
+
+
+class FailingPutClient(FakeClient):
+    fail_after = 0
+
+    def put_event(self, uid, data):
+        if len(self.put) >= self.fail_after:
+            raise ConnectionError("caldav down")
+        return super().put_event(uid, data)
+
+
+def test_upload_failure_keeps_old_events_and_counts(cfg, tmp_path):
+    """Uploads happen before deletes: a failed upload deletes nothing, and the result keeps counts."""
+    existing = {"u/old.ics": ics("old", datetime(2026, 11, 25, 17, 15, tzinfo=timezone.utc), datetime(2026, 11, 25, 17, 30, tzinfo=timezone.utc))}
+    FailingPutClient.fail_after = 1
+    FakeClient.instances = []
+    r = sync_from_images(cfg, ["w0.png", "w1.png"], extractor=fake_extractor([
+        WeekExtraction(*W0, [ev("2026-11-25"), ev("2026-11-26")]), WeekExtraction(*W1, [])]),
+        client_factory=lambda *a, **k: FailingPutClient(*a, existing=existing), now=NOW,
+        archive_dir=str(tmp_path / "a"))
+    assert r["ok"] is False and "caldav down" in r["error"]
+    assert r["created"] == 1
+    assert FakeClient.instances[0].deleted == []
+
+
+def test_replaced_resource_not_deleted(cfg, tmp_path):
+    """An existing event with the same stable UID is overwritten by the PUT, so it must not be deleted after."""
+    new = ev("2026-11-25")
+    uid = sync_tool._stable_uid(new.title, "2026-11-25T12:15:00")
+    existing = {f"u/{uid}.ics": ics(uid, datetime(2026, 11, 25, 17, 15, tzinfo=timezone.utc), datetime(2026, 11, 25, 17, 30, tzinfo=timezone.utc))}
+    r = run(cfg, tmp_path, [WeekExtraction(*W0, [new]), WeekExtraction(*W1, [])], existing)
+    assert r["ok"] is True and r["created"] == 1 and r["deleted"] == 0
+    assert FakeClient.instances[0].deleted == []
